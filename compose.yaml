@@ -22,8 +22,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: local
       TICKGEEK_DB_URL: jdbc:postgresql://postgres:5432/tickgeek
-      # Trust X-Forwarded-For from the frontend container (Docker private network addresses).
-      TICKGEEK_TRUSTED_PROXIES: '10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}'
+      FRONTEND_SECRET: dev-only-frontend-secret-at-least-32-bytes
     ports:
       - "8080:8080"
     depends_on:
@@ -35,6 +34,7 @@ services:
     environment:
       API_URL: http://backend:8080/api
       CLIENT_IP_HEADER: x-real-ip
+      FRONTEND_SECRET: dev-only-frontend-secret-at-least-32-bytes
     ports:
       - "3000:3000"
     depends_on:

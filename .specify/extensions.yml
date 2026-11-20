@@ -1,0 +1,18 @@
+# Project-local hooks read by the speckit-* skills.
+# speckit-brief (in .claude/skills/) writes whichever brief is missing or stale.
+hooks:
+  after_specify:
+    - extension: brief
+      command: speckit.brief
+      description: Write brief-spec.md, the short review version of spec.md
+      optional: false
+  after_clarify:
+    - extension: brief
+      command: speckit.brief
+      description: Refresh brief-spec.md after clarifications
+      optional: false
+  after_plan:
+    - extension: brief
+      command: speckit.brief
+      description: Write brief-design.md, the short review version of the design docs
+      optional: false

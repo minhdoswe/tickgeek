@@ -14,8 +14,6 @@ RUN useradd --system --uid 10001 tickgeek
 WORKDIR /app
 COPY --from=build /app/app.jar app.jar
 USER tickgeek
-# Tuned for a small host (Render free: 0.1 CPU, 512 MB): small heap share, single-threaded GC,
-# fast-start JIT only, smaller thread stacks.
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k"
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

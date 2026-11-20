@@ -80,17 +80,25 @@ remain.
      hosting edge proxy sets and overwrites, named by the `CLIENT_IP_HEADER` environment variable
      (e.g. `x-real-ip`). A client-sent `X-Forwarded-For` is never read. If the header is missing
      or not a valid IPv4/IPv6 address, the value is `unknown`, which is still rate-limited as one
-     shared source. `lib/api/client.ts` sets the outbound `X-Forwarded-For` to exactly that value.
-  2. **Backend** trusts `X-Forwarded-For` only from the Next.js server's address (Tomcat
-     `RemoteIpValve` via `server.forward-headers-strategy=native` and
-     `server.tomcat.remoteip.internal-proxies`, set by `TICKGEEK_TRUSTED_PROXIES`). A direct
-     caller from any other address is identified by its socket address, whatever header it sends.
-     A blank address is recorded as `unknown`.
-- **Deployment rule**: the edge proxy must overwrite `CLIENT_IP_HEADER`, never append to it. This
-  is recorded in the backend docs.
+     shared source. `lib/api/client.ts` sends that value as `X-Tickgeek-Client-Ip`, together with
+     `X-Tickgeek-Frontend-Secret` (`FRONTEND_SECRET`).
+  2. **Backend** (`RequestSourceResolver`) uses `X-Tickgeek-Client-Ip` only when
+     `X-Tickgeek-Frontend-Secret` equals `tickgeek.frontend.secret` (constant-time compare, at
+     least 32 bytes, checked at startup). A value that is not an IP literal is recorded as
+     `unknown`. Any other caller is identified by its address as Tomcat resolves it:
+     `RemoteIpValve` (`server.forward-headers-strategy=native`) reads `X-Forwarded-For` only from
+     `TICKGEEK_TRUSTED_PROXIES` (on Render, its internal proxy). A blank address is `unknown`.
+- **Deployment rule**: the edge proxy must overwrite `CLIENT_IP_HEADER`, never append to it
+  (`x-forwarded-for` on Vercel). Recorded in the root README, "Deploy".
 - **Rationale**: Without this every request would appear to come from the Next.js server, and an
   echoed header would let clients choose their own source and bypass per-source limits.
-- **Alternatives considered**: Device fingerprinting (privacy-invasive, overkill).
+- **Changed 2026-11-20**: the backend used to trust `X-Forwarded-For` by the Next.js server's
+  address. On Vercel + Render that fails: Vercel calls out from changing, shared addresses that
+  can't be listed, and Render's proxy appends to a caller's `X-Forwarded-For` instead of
+  replacing it. A shared secret proves the caller is the frontend wherever it runs.
+- **Alternatives considered**: Device fingerprinting (privacy-invasive, overkill); keeping
+  address trust and accepting that all users share the frontend's IPs (per-source limit
+  becomes meaningless).
 
 ## R7. Hiding whether an email is registered (FR-004, SC-005)
 

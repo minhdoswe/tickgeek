@@ -23,6 +23,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 public abstract class AbstractIntegrationTest {
 
     public static final String CODE_SECRET = "test-code-secret-at-least-32-bytes-long";
+    public static final String FRONTEND_SECRET = "test-frontend-secret-at-least-32-bytes";
     protected static final String DEFAULT_SOURCE = "203.0.113.7";
 
     @ServiceConnection
@@ -40,6 +41,7 @@ public abstract class AbstractIntegrationTest {
     @DynamicPropertySource
     static void secrets(DynamicPropertyRegistry registry) {
         registry.add("tickgeek.auth.code-secret", () -> CODE_SECRET);
+        registry.add("tickgeek.frontend.secret", () -> FRONTEND_SECRET);
     }
 
     @BeforeEach

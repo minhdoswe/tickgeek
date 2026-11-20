@@ -23,7 +23,8 @@
   ```
 - Why: when the user highlights a comment, it should tell them why the test exists without
   them having to read the code.
-- Applies to: all comments and Javadoc, not only tests.
+- Applies to: test comments and Javadoc only. Main code, config and SQL get no comments (see
+  "Only test code gets comments").
 
 ### Purpose before mechanics
 - Doesn't work: answering "why did you write this test" with how it works: the mocked
@@ -79,4 +80,30 @@
 - Why: the user said agents must be able to navigate to the referenced document; a reference
   without its spec folder is useless to them. This replaced an earlier "remove all references"
   request (2026-11-19).
-- Applies to: all code comments and Javadoc, in main and test code, SQL and config files.
+- Applies to: test comments and Javadoc.
+
+### Only test code gets comments
+- Doesn't work: comment blocks in main code and config, e.g. the four-line comment above
+  `hikari.data-source-properties` in `application.yaml` explaining `lock_timeout`, and the
+  Javadoc on `CodeRequestLockRepository.lock()` explaining SQLSTATE 55P03. The user deleted the
+  yaml comment and said the comment rules are for tests, not code or config. The cause was the
+  "Applies to: all comments" lines in this file, which stretched the test rules to everything.
+- Works: write no comments in main Java code, `application*.yaml` or SQL unless the user asks
+  for one. Put the reasoning in the Javadoc of the test that proves the behaviour, or explain
+  it in chat when asked.
+- Why: the user wants comments only where tests explain what they prove; elsewhere they are
+  noise.
+- Applies to: `/impl`, `/speckit-implement` and every code or config edit.
+
+### Say what problem a change solves before explaining the change
+- Doesn't work: explaining the outbox UUID change with headings like "Problem 1: `save()` ran
+  an extra query because the id was already set" and going straight into `isNew`, `merge`,
+  B-tree pages and UUID bit layouts. The user replied "I don't know what problem we are
+  resolving right now."
+- Works: open with the problem in plain words and how serious it is, before any mechanism:
+  "Nothing was broken. Every code request did one useless database query, and the outbox
+  table's index would get slower as it grows. The change removes both." Then, only if the user
+  wants it, how each part works, one at a time.
+- Why: the mechanics mean nothing until the user knows what goes wrong without the change and
+  whether it matters. This is the second correction of "Purpose before mechanics" in this file.
+- Applies to: every explanation of a change, a fix or a review finding.

@@ -132,7 +132,7 @@ tickgeek_frontend/
 │   ├── authAction.ts                         # requestCodeAction (Server Action)
 │   └── formState.ts                          # form state + error mapping
 └── lib/
-    ├── api/client.ts                         # fetch wrapper: API_URL, X-Forwarded-For, ApiError
+    ├── api/client.ts                         # fetch wrapper: API_URL, client IP + frontend secret, ApiError
     ├── api/auth.ts                           # requestCode
     ├── api/types.ts                          # contract types
     └── auth/clientIp.ts                      # one IP from CLIENT_IP_HEADER (R6)

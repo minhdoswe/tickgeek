@@ -8,7 +8,7 @@ the matching files before any piece of work and adds an entry every time the use
 
 | File | Read it when |
 |---|---|
-| `test-comment.md` | Writing or changing comments or Javadoc (tests included), or explaining code or a decision |
+| `test-comment.md` | Writing or changing comments or Javadoc anywhere (only tests get them), or explaining code or a decision |
 
 Work that spans several topics needs every matching file. Each new topic file gets its own row
 here. Name it after the topic, e.g. `naming.md` or `api.md`.

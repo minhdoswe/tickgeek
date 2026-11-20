@@ -5,6 +5,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
+import minhdoswe.tickgeek.common.RequestSourceResolver;
+
 /** Sends a real HTTP request through Tomcat, so its RemoteIpValve decides which IP to trust. */
 final class ForwardedHeaderSupport {
 
@@ -14,13 +16,24 @@ final class ForwardedHeaderSupport {
     }
 
     static int requestCodeWithForwardedFor(int port, String email) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/auth/code-requests"))
+        return send(request(port, email).header("X-Forwarded-For", SPOOFED_IP));
+    }
+
+    static int requestCodeAsFrontend(int port, String email, String clientIp, String secret) throws Exception {
+        return send(request(port, email)
+                .header(RequestSourceResolver.CLIENT_IP_HEADER, clientIp)
+                .header(RequestSourceResolver.FRONTEND_SECRET_HEADER, secret));
+    }
+
+    private static HttpRequest.Builder request(int port, String email) {
+        return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/auth/code-requests"))
                 .header("Content-Type", "application/json")
-                .header("X-Forwarded-For", SPOOFED_IP)
-                .POST(HttpRequest.BodyPublishers.ofString("{\"email\":\"%s\"}".formatted(email)))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofString("{\"email\":\"%s\"}".formatted(email)));
+    }
+
+    private static int send(HttpRequest.Builder request) throws Exception {
         try (HttpClient client = HttpClient.newHttpClient()) {
-            return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+            return client.send(request.build(), HttpResponse.BodyHandlers.discarding()).statusCode();
         }
     }
 }
