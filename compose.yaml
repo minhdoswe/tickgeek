@@ -1,0 +1,44 @@
+# Runs the whole app locally: docker compose up --build, then open http://localhost:3000/sign-in
+# The backend uses the `local` profile: dev-only secrets, and code emails go to its log
+# (docker compose logs -f backend) instead of Brevo. Not for production.
+name: tickgeek
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tickgeek
+      POSTGRES_USER: tickgeek
+      POSTGRES_PASSWORD: tickgeek_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tickgeek", "-d", "tickgeek"]
+      interval: 2s
+      retries: 30
+
+  backend:
+    build: ./tickgeek_backend
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      TICKGEEK_DB_URL: jdbc:postgresql://postgres:5432/tickgeek
+      # Trust X-Forwarded-For from the frontend container (Docker private network addresses).
+      TICKGEEK_TRUSTED_PROXIES: '10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}'
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./tickgeek_frontend
+    environment:
+      API_URL: http://backend:8080/api
+      CLIENT_IP_HEADER: x-real-ip
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:

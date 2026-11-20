@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: tickgeek
+  datasource:
+    url: ${TICKGEEK_DB_URL:jdbc:postgresql://localhost:5432/tickgeek}
+    username: ${TICKGEEK_DB_USER:tickgeek}
+    password: ${TICKGEEK_DB_PASSWORD:tickgeek_password}
+    hikari:
+      data-source-properties:
+        options: "-c lock_timeout=2s -c idle_in_transaction_session_timeout=30s"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+server:
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: '${TICKGEEK_TRUSTED_PROXIES:127\.0\.0\.1|0:0:0:0:0:0:0:1}'
+
+tickgeek:
+  auth:
+    code-ttl: 10m
+    limits:
+      window: 1h
+      resend-cooldown: 60s
+      per-email-per-hour: 5
+      per-source-per-hour: 20
+      global-per-hour: 1000
+    code-secret: ${TICKGEEK_AUTH_CODE_SECRET}

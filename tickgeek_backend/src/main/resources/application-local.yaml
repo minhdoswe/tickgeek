@@ -1,0 +1,6 @@
+tickgeek:
+  auth:
+    code-secret: ${TICKGEEK_AUTH_CODE_SECRET:QBBC6yDGfgbNiEZ9yzrOLI1QwoY1ggu_2tcSDF5v0U8yE6905jrF8xE3Ec4R8Ho7}
+    limits:
+      resend-cooldown: 1s
+      per-source-per-hour: 200
