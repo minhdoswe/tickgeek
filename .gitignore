@@ -24,3 +24,11 @@ coverage/
 
 
 target/
+
+# Syncthing
+.stfolder/
+.stignore
+*.sync-conflict-*
+
+# Claude Code, per machine
+.claude/settings.local.json

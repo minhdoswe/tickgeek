@@ -9,7 +9,6 @@ const INITIAL_STATE: FormState = {};
 const EMAIL_MAX_LENGTH = 254;
 const MISSING_MESSAGE = "Enter your email address.";
 const INVALID_MESSAGE = "Enter a valid email address.";
-/** After this long, a pending request most likely hit a sleeping backend. */
 const SLOW_AFTER_MS = 5000;
 
 /**

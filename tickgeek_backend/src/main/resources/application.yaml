@@ -4,9 +4,9 @@ spring:
   application:
     name: tickgeek
   datasource:
-    url: ${TICKGEEK_DB_URL:jdbc:postgresql://localhost:5432/tickgeek}
-    username: ${TICKGEEK_DB_USER:tickgeek}
-    password: ${TICKGEEK_DB_PASSWORD:tickgeek_password}
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
     hikari:
       data-source-properties:
         options: "-c lock_timeout=2s -c idle_in_transaction_session_timeout=30s"
@@ -14,8 +14,11 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  flyway: 
+    enabled: true
 
 server:
+  port: ${PORT:8080}
   forward-headers-strategy: native
   tomcat:
     remoteip:
@@ -31,3 +34,5 @@ tickgeek:
       per-source-per-hour: 20
       global-per-hour: 1000
     code-secret: ${TICKGEEK_AUTH_CODE_SECRET}
+  frontend:
+    secret: ${FRONTEND_SECRET}

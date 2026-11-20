@@ -1,9 +1,9 @@
 # Auth API Contract
 
 Base path: `/api/auth`. JSON in and out. Called only by the Next.js server
-(`tickgeek_frontend/lib/api/auth.ts`). Next.js sets `X-Forwarded-For` to exactly one client IP
-derived from the hosting proxy's header, replacing any client-sent value. The backend trusts it
-only from the Next.js server address (research R6).
+(`tickgeek_frontend/lib/api/auth.ts`). Next.js sends exactly one client IP, derived from the
+hosting proxy's header, as `X-Tickgeek-Client-Ip`, with `X-Tickgeek-Frontend-Secret`. The
+backend uses that IP only when the secret matches (research R6).
 
 ## Access rules
 

@@ -36,7 +36,15 @@ export async function apiFetch<T>(path: string, request: ApiRequest = {}): Promi
 }
 
 async function requestHeaders(): Promise<Headers> {
-  return new Headers({ "Content-Type": "application/json", "X-Forwarded-For": await clientIp() });
+  const secret = process.env.FRONTEND_SECRET;
+  if (!secret) {
+    throw new Error("FRONTEND_SECRET is not set");
+  }
+  return new Headers({
+    "Content-Type": "application/json",
+    "X-Tickgeek-Client-Ip": await clientIp(),
+    "X-Tickgeek-Frontend-Secret": secret,
+  });
 }
 
 async function toApiError(response: Response): Promise<ApiError> {

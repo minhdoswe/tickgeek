@@ -7,11 +7,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.persistence.EntityManager;
 
-/**
- * Health check, used by the host's health probe and by the frontend to wake a sleeping instance.
- * It runs one trivial query, so it reports unhealthy when the database is unreachable, and the
- * first call also wakes a sleeping database before a real request needs it.
- */
 @RestController
 public class HealthController {
 
