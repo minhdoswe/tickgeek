@@ -5,10 +5,11 @@ import org.junit.jupiter.api.Test;
 import minhdoswe.tickgeek.support.AbstractIntegrationTest;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Only the code request endpoint is public; everything else is denied
+ * Only the code request endpoint and the health check are public; everything else is denied
  * (specs/001-request-code/research.md R17).
  */
 class SecurityMatchersIT extends AbstractIntegrationTest {
@@ -27,7 +28,21 @@ class SecurityMatchersIT extends AbstractIntegrationTest {
     }
 
     /**
-     * Proves every endpoint not listed in SecurityConfig.PUBLIC_ENDPOINTS is refused, so a new
+     * Proves the health check works without a sign-in token, so the host's probe and the
+     * frontend's wake-up call can reach it.
+     * <p>
+     * Cases: GET /api/health with no Authorization header → 200 with status UP.
+     */
+    @Test
+    void healthNeedsNoToken() throws Exception {
+        // When / Then: a request with no Authorization header gets a healthy answer
+        mockMvc.perform(get("/api/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    /**
+     * Proves every endpoint not listed in SecurityConfig's public lists is refused, so a new
      * endpoint stays closed until someone opens it on purpose.
      * <p>
      * Cases: GET on the public path, POST /api/auth/code-verifications, /api/events, /actuator
