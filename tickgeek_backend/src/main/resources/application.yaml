@@ -24,6 +24,19 @@ server:
     remoteip:
       internal-proxies: '${TICKGEEK_TRUSTED_PROXIES:127\.0\.0\.1|0:0:0:0:0:0:0:1}'
 
+# Actuator serves the health check at /api/health (base-path + "/health"), checking the database too.
+management:
+  endpoints:
+    web:
+      base-path: /api
+      exposure:
+        include: health
+      discovery:
+        enabled: false
+  endpoint:
+    health:
+      show-details: never
+
 tickgeek:
   auth:
     code-ttl: 10m
