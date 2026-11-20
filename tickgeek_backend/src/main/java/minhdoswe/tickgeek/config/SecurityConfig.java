@@ -17,6 +17,10 @@ public class SecurityConfig {
         "/api/auth/code-requests",
     };
 
+    static final String[] PUBLIC_GET_ENDPOINTS = {
+        "/api/health",
+    };
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) {
         http
@@ -25,6 +29,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_ENDPOINTS).permitAll()
+                        .requestMatchers(HttpMethod.GET, PUBLIC_GET_ENDPOINTS).permitAll()
                         .anyRequest().denyAll());
         return http.build();
     }
