@@ -1,4 +1,4 @@
-/** Types for the backend auth API (specs/001-email-code-auth/contracts/auth-api.md). */
+/** Types for the backend auth API (specs/001-request-code/contracts/auth-api.md). */
 
 export type CodeRequestResponse = {
   email: string;

@@ -23,7 +23,6 @@ public class TooManyRequestsException extends ApiException {
         return new TooManyRequestsException(message, OptionalLong.of(retryAfterSeconds));
     }
 
-    /** Sets no Retry-After, so the response does not reveal when the limit resets (contracts/auth-api.md). */
     public static TooManyRequestsException generic() {
         return new TooManyRequestsException(GENERIC_MESSAGE, OptionalLong.empty());  
     }

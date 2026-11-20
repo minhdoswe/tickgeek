@@ -7,10 +7,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Queues a code email: saves the outbox job in the caller's transaction and announces it
- * (research R21). Sending the email is not part of this branch.
- */
 @Component
 public class CodeEmailQueue {
 

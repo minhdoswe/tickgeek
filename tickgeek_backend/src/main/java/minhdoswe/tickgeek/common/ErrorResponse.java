@@ -5,7 +5,6 @@ import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-/** The single error body shape returned by every endpoint (contracts/auth-api.md). */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ErrorResponse(String error, String message, Map<String, List<String>> fields) {
 

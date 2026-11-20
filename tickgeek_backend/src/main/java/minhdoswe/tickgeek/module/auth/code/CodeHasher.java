@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import minhdoswe.tickgeek.config.AuthProperties;
 
-/** Codes are stored only as HMAC-SHA256 of "email:code" under a server secret (research R3). */
 @Component
 public class CodeHasher {
 

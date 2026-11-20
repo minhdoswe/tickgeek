@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcType;
+import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.dialect.type.PostgreSQLEnumJdbcType;
 
 import jakarta.persistence.Column;
@@ -13,12 +14,12 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/** An email job. Its payload holds the code until the job finishes, then it is erased (R9). */
 @Entity
 @Table(name = "outboxes")
 public class Outbox {
 
     @Id
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
     private String payload;
@@ -51,7 +52,6 @@ public class Outbox {
 
     public static Outbox forCode(Long verificationCodeId, String payload, Instant now) {
         Outbox job = new Outbox();
-        job.id = UUID.randomUUID();
         job.verificationCodeId = verificationCodeId;
         job.payload = payload;
         job.createdAt = now;

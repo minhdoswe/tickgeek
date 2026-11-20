@@ -1,4 +1,4 @@
--- Schema for requesting an email sign-in code (specs/001-email-code-auth/data-model.md).
+-- Schema for requesting an email sign-in code (specs/001-request-code/data-model.md).
 -- Flyway runs this file in one transaction, so no BEGIN/COMMIT here.
 
 -- Enum types

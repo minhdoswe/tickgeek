@@ -4,7 +4,6 @@ import java.util.OptionalLong;
 
 import org.springframework.http.HttpStatus;
 
-/** A failure with a fixed HTTP status and contract error code; subclasses define each case. */
 public abstract class ApiException extends RuntimeException {
 
     private final HttpStatus status;
@@ -24,7 +23,6 @@ public abstract class ApiException extends RuntimeException {
         return error;
     }
 
-    /** Seconds the client should wait before retrying; empty unless the subclass says otherwise. */
     public OptionalLong retryAfterSeconds() {
         return OptionalLong.empty();
     }

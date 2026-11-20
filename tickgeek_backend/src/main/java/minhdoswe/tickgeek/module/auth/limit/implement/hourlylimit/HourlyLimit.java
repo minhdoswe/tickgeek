@@ -9,10 +9,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
-/**
- * Refuses a request when the requests already made in the rolling window reach the maximum.
- * Subclasses choose which requests count (same email, same source, or all).
- */
 public abstract class HourlyLimit implements CodeRequestLimit {
 
     private final Duration window;

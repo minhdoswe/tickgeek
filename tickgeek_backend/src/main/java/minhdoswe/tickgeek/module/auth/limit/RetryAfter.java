@@ -10,7 +10,6 @@ public final class RetryAfter {
     private RetryAfter() {
     }
 
-    /** Whole seconds from now until the given moment, rounded up, and at least one. */
     public static long secondsUntil(Instant now, Instant moment) {
         Duration wait = Duration.between(now, moment);
         long seconds = wait.getSeconds() + (wait.getNano() > 0 ? 1 : 0);

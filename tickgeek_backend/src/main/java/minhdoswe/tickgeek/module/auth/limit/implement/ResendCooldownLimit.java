@@ -15,7 +15,6 @@ import org.springframework.stereotype.Component;
 import minhdoswe.tickgeek.config.AuthProperties;
 import minhdoswe.tickgeek.module.auth.code.VerificationCodeRepository;
 
-/** At most one code request per email per cooldown period (FR-008). */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ResendCooldownLimit implements CodeRequestLimit {

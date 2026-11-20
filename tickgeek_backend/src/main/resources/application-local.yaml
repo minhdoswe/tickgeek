@@ -1,11 +1,6 @@
-# Local development.
-
-# Dev-only secret so the app starts without env vars. Never use it outside local.
-# The env var still wins when set.
 tickgeek:
   auth:
     code-secret: ${TICKGEEK_AUTH_CODE_SECRET:QBBC6yDGfgbNiEZ9yzrOLI1QwoY1ggu_2tcSDF5v0U8yE6905jrF8xE3Ec4R8Ho7}
-    # Relaxed limits for manual testing; production and tests use the spec values in application.yaml.
     limits:
       resend-cooldown: 1s
       per-source-per-hour: 200

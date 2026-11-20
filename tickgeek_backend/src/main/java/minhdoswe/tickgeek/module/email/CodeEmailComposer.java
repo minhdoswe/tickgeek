@@ -4,7 +4,6 @@ import org.springframework.stereotype.Component;
 
 import tools.jackson.databind.json.JsonMapper;
 
-/** Turns code email payloads into outbox JSON. */
 @Component
 public class CodeEmailComposer {
 

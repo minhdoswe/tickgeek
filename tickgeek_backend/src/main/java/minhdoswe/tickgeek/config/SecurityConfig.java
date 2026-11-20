@@ -10,7 +10,6 @@ import org.springframework.security.web.SecurityFilterChain;
 
 import jakarta.servlet.DispatcherType;
 
-/** Stateless API security (research R17): only the code request endpoint is open; everything else is denied. */
 @Configuration
 public class SecurityConfig {
 

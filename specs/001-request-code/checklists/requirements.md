@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Email Code Sign-In and Registration
+# Specification Quality Checklist: Email Code Sign-In: Request a Code
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-11
@@ -31,13 +31,6 @@
 
 ## Notes
 
-- Resolved 2026-11-11: FR-017 email-code only (no passwords); FR-018/FR-019 first and last name
-  collected after code verification, new users only.
-- Review fixes 2026-11-11: code used up on verification + registration permission (FR-005,
-  FR-019); anti-enumeration scoped to pre-verification (FR-004, SC-005); concurrent name submit
-  signs both flows in (FR-021); failed sends count toward limits (FR-008); per-source and
-  system-wide limits (FR-020); session timeout defined with scenarios (FR-014).
-- Known open (deferred by user): SC-002/SC-003 lack measurement windows and populations; SC-006
-  wording is absolute ("cannot be guessed").
+- 2026-11-19: spec trimmed to the code-request slice; requirement IDs keep their original
+  numbers. The per-source cap is approximate under parallel requests (Assumptions).
 - All items pass.
-- Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`

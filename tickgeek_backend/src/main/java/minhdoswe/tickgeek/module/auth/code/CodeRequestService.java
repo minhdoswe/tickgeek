@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +19,6 @@ import minhdoswe.tickgeek.module.email.CodeEmailComposer;
 import minhdoswe.tickgeek.module.email.CodeEmailPayload;
 import minhdoswe.tickgeek.module.email.CodeEmailQueue;
 
-/**
- * Issues a code for an email. It never looks up accounts, so the response cannot reveal whether
- * the email is registered (FR-004, research R7).
- */
 @Service
 public class CodeRequestService {
 
@@ -55,7 +52,7 @@ public class CodeRequestService {
     @Transactional
     public CodeRequestResponse request(String email, String source) {
         String normalizedEmail = EmailAddress.normalize(email);
-        lock.acquire(normalizedEmail);
+        lockEmail(normalizedEmail);
         CodeRequestContext context = new CodeRequestContext(normalizedEmail, source, clock.instant());
         enforceLimits(context);
         codes.invalidateLive(context.email());
@@ -65,6 +62,14 @@ public class CodeRequestService {
         emailQueue.enqueue(saved.getId(), payload, context.now());
         return new CodeRequestResponse(
                 context.email(), properties.codeValidMinutes(), cooldown.nextAllowedAt(context.now()));
+    }
+
+    private void lockEmail(String email) {
+        try {
+            lock.acquire(email);
+        } catch (CannotAcquireLockException timedOut) {
+            throw TooManyRequestsException.generic();
+        }
     }
 
     private void enforceLimits(CodeRequestContext context) {

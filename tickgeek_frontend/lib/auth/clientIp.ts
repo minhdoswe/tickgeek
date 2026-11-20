@@ -5,7 +5,8 @@ export const UNKNOWN_IP = "unknown";
 
 /**
  * The client IP, read only from the header the hosting proxy overwrites (CLIENT_IP_HEADER).
- * The incoming X-Forwarded-For is never trusted, because clients can set it (research R6).
+ * The incoming X-Forwarded-For is never trusted, because clients can set it
+ * (specs/001-request-code/research.md R6).
  */
 function clientIpFrom(requestHeaders: Headers): string {
   const headerName = process.env.CLIENT_IP_HEADER;

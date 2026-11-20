@@ -10,7 +10,10 @@ const EMAIL_MAX_LENGTH = 254;
 const MISSING_MESSAGE = "Enter your email address.";
 const INVALID_MESSAGE = "Enter a valid email address.";
 
-/** Browser-side check before sending. The backend check (research R11) stays the source of truth. */
+/**
+ * Browser-side check before sending. The backend check stays the source of truth
+ * (specs/001-request-code/research.md R11).
+ */
 function emailProblem(input: HTMLInputElement): string | undefined {
   if (input.validity.valueMissing) {
     return MISSING_MESSAGE;

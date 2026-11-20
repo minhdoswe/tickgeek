@@ -10,13 +10,6 @@ import org.springframework.stereotype.Component;
 import minhdoswe.tickgeek.config.AuthProperties;
 import minhdoswe.tickgeek.module.auth.code.VerificationCodeRepository;
 
-/**
- * A system-wide cap on code emails per window, protecting the email budget (FR-020).
- *
- * <p>The cap is approximate (research R5): the count runs without a lock, so requests that pass
- * their per-source and per-email locks at the same moment can all read the same count before any
- * of them commits. A burst can exceed the cap by about the number of code requests in flight.
- */
 @Component
 public class GlobalHourlyLimit extends HourlyLimit {
 

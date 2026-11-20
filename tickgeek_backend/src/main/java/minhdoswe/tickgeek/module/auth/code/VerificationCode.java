@@ -51,7 +51,6 @@ public class VerificationCode {
     protected VerificationCode() {
     }
 
-    /** A new code waiting for its email to be accepted by the provider (research R16). */
     public static VerificationCode pending(CodeRequestContext request, String codeHmac) {
         VerificationCode code = new VerificationCode();
         code.email = request.email();
