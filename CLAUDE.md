@@ -23,20 +23,6 @@
   recorded decision, not only the ones that look like design choices.
 - Mentioning a decision in a summary after making it does not count as asking.
 
-## Follow the user's taste rules (`taste/`)
-
-- Before any piece of work, read `taste/README.md`, then every taste file its index lists for
-  that kind of work. Work that spans several topics needs each matching file. Example: writing
-  tests and their Javadoc → `taste/test.md` and `taste/test-comment.md`. This applies to `/impl`,
-  `/speckit-implement`, proposals and explanations alike.
-- Entries marked **Promoted** still apply. If a taste rule conflicts with the constitution, the
-  constitution wins: point out the conflict instead of picking one silently.
-- When the user corrects how you work, write or explain, add a Doesn't work / Works / Why
-  entry to the matching topic file in the same turn. If there is no matching file, create one
-  and add it to the README index. Tell the user in one line which file you changed. Taste
-  files are not code, so this needs no `/impl`.
-- Moving taste rules into the constitution is done only through `/taste-promote`.
-
 ## Load the Postgres skill for database work
 
 - Before proposing, reviewing or writing anything that touches Postgres, load the
