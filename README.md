@@ -122,4 +122,4 @@ Per-IP rate limits need the real client IP. Next.js reads it only from `CLIENT_I
 the hosting edge must overwrite (never append to), and sends it to the backend with
 `FRONTEND_SECRET`. The backend uses that IP only when the secret matches; any other caller is
 identified by its own address. See
-[specs/001-request-code/research.md](specs/001-request-code/research.md) R6.
+[specs/001-request-code/research.md](specs/001-request-code/research.md) R6. hello
