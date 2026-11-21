@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir -p .vercel
           echo '{"projectId":"unlinked","orgId":"unlinked","settings":{"framework":"nextjs","rootDirectory":"tickgeek_frontend"}}' > .vercel/project.json
-          npx --yes "$VERCEL_CLI" build --prod --yes
+          npx --yes "$VERCEL_CLI" build --prod --yes --standalone
 
       - name: Collect release
         env:
