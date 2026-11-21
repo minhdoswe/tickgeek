@@ -130,7 +130,7 @@ jobs:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
-          mkdir -p .vercel
+          mkdir -p .vercel tickgeek_frontend
           mv release/frontend .vercel/output
           npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
 
@@ -238,7 +238,7 @@ jobs:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
-          mkdir -p .vercel
+          mkdir -p .vercel tickgeek_frontend
           mv release/frontend .vercel/output
           npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
 
