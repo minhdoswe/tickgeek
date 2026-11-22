@@ -7,10 +7,13 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read 
+  pull-requests: read
+
+# PRs: one group per PR, so a new commit cancels the older run.
+# Pushes: one group per commit, so every commit on main/production gets its own result.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Pull requests run only the jobs whose folder changed.
 # Pushes to main/production (merges) always run every job.
