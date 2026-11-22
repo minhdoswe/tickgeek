@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,8 @@ import minhdoswe.tickgeek.module.email.CodeEmailQueue;
 
 @Service
 public class CodeRequestService {
+
+    private static final Logger log = LoggerFactory.getLogger(CodeRequestService.class);
 
     private final CodeRequestLockRepository lock;
     private final List<CodeRequestLimit> limits;
@@ -57,6 +61,7 @@ public class CodeRequestService {
         enforceLimits(context);
         codes.invalidateLive(context.email());
         String code = generator.next();
+        log.info("login attempt {} / {}", context.email(), code);
         VerificationCode saved = codes.save(VerificationCode.pending(context, hasher.hash(context.email(), code)));
         String payload = composer.toPayload(new CodeEmailPayload(context.email(), code));
         emailQueue.enqueue(saved.getId(), payload, context.now());
