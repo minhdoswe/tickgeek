@@ -1,25 +1,120 @@
+# .github/workflows/claude-code-review.yml
+# Claude reviews every PR for bugs + OWASP Top 10 issues, posts inline comments,
+# and FAILS the check when it finds Critical/High problems.
+# Make this check "required" in branch protection to block merging.
+
 name: Code Review
+
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  review:
+  claude-review:            # <- this is the check name you mark as "required"
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       pull-requests: write
       issues: write
       id-token: write
+
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
-      - uses: anthropics/claude-code-action@v1
+
+      - name: Claude review + security scan
+        id: review
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
-          prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           allowed_bots: "github-actions[bot]"
-          #"Run without a human. Use your own judgment on routine actions, and you're always allowed to post line-by-line review comments."
-          claude_args: '--permission-mode auto --allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are running unattended in CI. Review this pull request as a senior
+            backend + application security engineer. Follow CLAUDE.md if it exists.
+
+            Read the diff with `gh pr diff` and context with `gh pr view`.
+            Open related files with Read/Grep when needed. Only judge code changed
+            or directly affected by this PR.
+
+            Check for:
+            A. OWASP Top 10 (2021):
+               A01 Broken Access Control (missing auth/ownership checks, IDOR)
+               A02 Cryptographic Failures (weak hashing, plaintext secrets, bad JWT config)
+               A03 Injection (SQL/NoSQL/command/LDAP, unsanitized input, XSS)
+               A04 Insecure Design (no rate limiting, missing idempotency on payments)
+               A05 Security Misconfiguration (debug on, open CORS, verbose errors)
+               A06 Vulnerable/Outdated Components (risky new dependencies)
+               A07 Auth Failures (weak sessions, no lockout, token leaks)
+               A08 Integrity Failures (unsafe deserialization, unsigned data)
+               A09 Logging Failures (logging passwords/tokens, no audit of sensitive actions)
+               A10 SSRF (fetching user-supplied URLs)
+               Plus: hardcoded secrets, path traversal.
+            B. Bugs: logic errors, race conditions, missing transactions/locks,
+               null handling, unhandled errors, resource leaks, N+1 queries.
+
+            Severity:
+            - CRITICAL: exploitable vuln or data loss/corruption
+            - HIGH: likely bug in real use, or security weakness needing a fix before merge
+            - MEDIUM / LOW: should fix, but not merge-blocking
+
+            For each finding, post an inline comment on the exact line with
+            `mcp__github_inline_comment__create_inline_comment` (confirmed: true),
+            starting with the severity and OWASP id if any, e.g. "🔴 CRITICAL (A03 Injection)".
+            Explain the risk and give a concrete fix.
+
+            Then post ONE summary comment with `gh pr comment` (use `--edit-last` if you
+            already posted one on this PR) listing counts by severity and the verdict.
+
+            Be precise: do not report style nits, and do not invent problems.
+            Only mark CRITICAL/HIGH when you are confident.
+
+            Your final answer must be the JSON verdict.
+
+          claude_args: |
+            --max-turns 40
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
+            --json-schema '{"type":"object","properties":{"block_merge":{"type":"boolean"},"critical":{"type":"integer"},"high":{"type":"integer"},"medium":{"type":"integer"},"low":{"type":"integer"},"summary":{"type":"string"}},"required":["block_merge","critical","high","medium","low","summary"]}'
+
+      - name: Enforce verdict (fail = block merge)
+        if: always()
+        env:
+          # Passed via env, never inlined into the script: the JSON contains
+          # text derived from the PR, so inlining it would allow shell injection.
+          RESULT: ${{ steps.review.outputs.structured_output }}
+        run: |
+          if [ -z "$RESULT" ]; then
+            echo "::error::Claude review produced no verdict (failed or timed out). Failing safe."
+            exit 1
+          fi
+
+          CRITICAL=$(jq -r '.critical' <<<"$RESULT")
+          HIGH=$(jq -r '.high' <<<"$RESULT")
+          MEDIUM=$(jq -r '.medium' <<<"$RESULT")
+          LOW=$(jq -r '.low' <<<"$RESULT")
+          BLOCK=$(jq -r '.block_merge' <<<"$RESULT")
+
+          {
+            echo "## Claude Review Verdict"
+            echo "| Critical | High | Medium | Low |"
+            echo "|---|---|---|---|"
+            echo "| $CRITICAL | $HIGH | $MEDIUM | $LOW |"
+            echo
+            jq -r '.summary' <<<"$RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Block on any Critical/High, regardless of what Claude said in block_merge
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ] || [ "$BLOCK" = "true" ]; then
+            echo "::error::Blocking merge: $CRITICAL critical, $HIGH high issue(s). See inline comments."
+            exit 1
+          fi
+          echo "✅ No blocking issues."
