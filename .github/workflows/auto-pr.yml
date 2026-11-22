@@ -5,8 +5,7 @@ on:
     branches-ignore: [main, production]
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: read # the PR is opened with AUTO_PR_TOKEN, not GITHUB_TOKEN
 
 concurrency:
   group: auto-pr-${{ github.ref }}
@@ -22,7 +21,7 @@ jobs:
 
       - name: Open PR if none is open
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.AUTO_PR_TOKEN }} # fine-grained PAT, so the PR is opened as you
         run: |
           open=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq length)
           if [ "$open" = 0 ]; then
