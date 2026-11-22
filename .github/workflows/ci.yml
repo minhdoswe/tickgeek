@@ -7,13 +7,36 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read # paths-filter lists a PR's changed files through the API
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Pull requests run only the jobs whose folder changed.
+# Pushes to main/production (merges) always run every job.
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            backend:
+              - 'tickgeek_backend/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'tickgeek_frontend/**'
+              - '.github/workflows/ci.yml'
+
   backend:
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -33,6 +56,8 @@ jobs:
           path: tickgeek_backend/target/site/jacoco/
 
   frontend:
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
