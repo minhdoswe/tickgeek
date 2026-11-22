@@ -19,13 +19,15 @@ jobs:
         with:
           fetch-depth: 0 # --fill reads the commits between main and this branch
 
-      - name: Open PR if none is open
+      - name: Open PR and enable auto-merge if none is open
         env:
           GH_TOKEN: ${{ secrets.AUTO_PR_TOKEN }} # fine-grained PAT, so the PR is opened as you
         run: |
           open=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq length)
           if [ "$open" = 0 ]; then
             gh pr create --base main --head "$GITHUB_REF_NAME" --fill
+            # GitHub merges the PR (merge commit) once main's required checks pass.
+            gh pr merge "$GITHUB_REF_NAME" --auto --merge
           else
             echo "A PR for $GITHUB_REF_NAME is already open"
           fi
