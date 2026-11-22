@@ -1,0 +1,32 @@
+name: Auto PR
+
+on:
+  push:
+    branches-ignore: [main, production]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: auto-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # --fill reads the commits between main and this branch
+
+      - name: Open PR if none is open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq length)
+          if [ "$open" = 0 ]; then
+            gh pr create --base main --head "$GITHUB_REF_NAME" --fill
+          else
+            echo "A PR for $GITHUB_REF_NAME is already open"
+          fi
