@@ -51,16 +51,44 @@ jobs:
           java-version: 25
           cache: maven
       - run: ./mvnw -B verify
-      - name: Coverage comment on PR
-        if: github.event_name == 'pull_request'
-        uses: Madrapps/jacoco-report@v1.7.1   # pin to a commit SHA like your paths-filter
-        with:
-          paths: ${{ github.workspace }}/tickgeek_backend/target/site/jacoco/jacoco.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
-          min-coverage-overall: 60
-          min-coverage-changed-files: 70
-          title: Backend coverage
-          update-comment: true
+      - name: Build coverage table
+        if: hashFiles('tickgeek_backend/target/site/jacoco/jacoco.xml') != ''
+        run: |
+          python3 - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          root = ET.parse("target/site/jacoco/jacoco.xml").getroot()
+          labels = {"INSTRUCTION": "Instructions", "BRANCH": "Branches", "LINE": "Lines",
+                    "COMPLEXITY": "Complexity", "METHOD": "Methods", "CLASS": "Classes"}
+          counters = {c.get("type"): c for c in root.findall("counter")}
+          rows = ["<!-- backend-coverage -->", "### Backend coverage", "",
+                  "| Metric | Covered | Missed | Coverage |", "|---|---:|---:|---:|"]
+          for key, label in labels.items():
+              c = counters.get(key)
+              if c is None:
+                  continue
+              cov, mis = int(c.get("covered")), int(c.get("missed"))
+              total = cov + mis
+              pct = f"{cov / total * 100:.1f}%" if total else "n/a"
+              rows.append(f"| {label} | {cov} | {mis} | {pct} |")
+          md = "\n".join(rows) + "\n"
+          open("coverage.md", "w").write(md)
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write(md)
+          PY
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request' && hashFiles('tickgeek_backend/target/site/jacoco/jacoco.xml') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          ID=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+                 --jq '.[] | select(.body | startswith("<!-- backend-coverage -->")) | .id' | head -n1)
+          if [ -n "$ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$ID" -F body=@coverage.md
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F body=@coverage.md
+          fi
       - if: always()
         uses: actions/upload-artifact@v4
         with:
