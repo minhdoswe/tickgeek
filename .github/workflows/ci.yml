@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 # PRs: one group per PR, so a new commit cancels the older run.
 # Pushes: one group per commit, so every commit on main/production gets its own result.
@@ -51,6 +51,16 @@ jobs:
           java-version: 25
           cache: maven
       - run: ./mvnw -B verify
+      - name: Coverage comment on PR
+        if: github.event_name == 'pull_request'
+        uses: Madrapps/jacoco-report@v1.7.1   # pin to a commit SHA like your paths-filter
+        with:
+          paths: ${{ github.workspace }}/tickgeek_backend/target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 60
+          min-coverage-changed-files: 70
+          title: Backend coverage
+          update-comment: true
       - if: always()
         uses: actions/upload-artifact@v4
         with:
