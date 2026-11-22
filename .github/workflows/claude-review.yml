@@ -21,4 +21,5 @@ jobs:
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           allowed_bots: "github-actions[bot]"
+          #"Run without a human. Use your own judgment on routine actions, and you're always allowed to post line-by-line review comments."
           claude_args: '--permission-mode auto --allowedTools "mcp__github_inline_comment__create_inline_comment"'
