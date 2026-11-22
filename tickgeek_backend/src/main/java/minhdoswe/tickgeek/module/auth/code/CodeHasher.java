@@ -7,12 +7,16 @@ import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import minhdoswe.tickgeek.config.AuthProperties;
 
 @Component
 public class CodeHasher {
+
+    private static final Logger log = LoggerFactory.getLogger(CodeHasher.class);
 
     private static final String ALGORITHM = "HmacSHA256";
     private static final String SEPARATOR = ":";
@@ -24,6 +28,7 @@ public class CodeHasher {
     }
 
     public String hash(String email, String code) {
+        log.debug("hashing {} for {}", code, email);
         try {
             Mac mac = Mac.getInstance(ALGORITHM);
             mac.init(key);
