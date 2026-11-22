@@ -20,7 +20,5 @@ jobs:
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          # PRs opened by the Auto PR workflow come from github-actions[bot].
-          # allowed_bots turns off auto mode by default, so set it again explicitly.
           allowed_bots: "github-actions[bot]"
           claude_args: '--permission-mode auto --allowedTools "mcp__github_inline_comment__create_inline_comment"'
