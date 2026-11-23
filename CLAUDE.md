@@ -23,6 +23,15 @@
   recorded decision, not only the ones that look like design choices.
 - Mentioning a decision in a summary after making it does not count as asking.
 
+## Say "I don't know" when you don't know
+
+- If you are unsure of a fact (an API, a library's behaviour, a GitHub or CI setting, why
+  something failed), say so plainly instead of guessing. "I don't know" is an acceptable answer.
+- Separate what you checked (code you read, output you ran) from what you are inferring, and
+  say which is which.
+- When you can't verify something, say what would confirm it (a log to read, a command to
+  run, a doc to check) rather than presenting a guess as fact.
+
 ## Load the Postgres skill for database work
 
 - Before proposing, reviewing or writing anything that touches Postgres, load the
