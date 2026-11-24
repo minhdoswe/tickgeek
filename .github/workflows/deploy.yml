@@ -1,66 +1,68 @@
+# Deploy: every push to main builds one release, deploys it to staging, then to production.
 name: Deploy
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      rollback_to:
-        description: Commit SHA of an earlier successful production release to deploy again
-        required: true
-        type: string
+    branches: [main]                       # every merge to main starts a deploy
 
 permissions:
-  contents: read
+  contents: read                           # default for every job: read the repo, nothing more
 
 env:
-  VERCEL_CLI: vercel@65.11.0
+  VERCEL_CLI: vercel@65.11.0               # Vercel CLI version, set once for every job
 
 jobs:
+  # 1. build: make one release (backend image + frontend files) that staging and production share
   build:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: read                       # read the repo code
+      packages: write                      # push the backend image to ghcr.io
     steps:
       - uses: actions/checkout@v5
+        with:  
+          persist-credentials: false       # copy the whole repo onto this machine
 
-      - id: image
+      - id: image                          # image name, lowercased (ghcr.io needs lowercase)
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tickgeek-backend" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3   # Docker builder that supports the cache below
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v3       # sign in to ghcr.io with this run's token
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - id: push
+      - id: push                           # build the backend image and push it to ghcr.io
         uses: docker/build-push-action@v6
         with:
-          context: tickgeek_backend
+          context: tickgeek_backend        # build from tickgeek_backend/Dockerfile
           push: true
-          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}   # tag = this commit
+          cache-from: type=gha             # reuse image layers from earlier runs
+          cache-to: type=gha,mode=max      # save all layers for the next run
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5        # install Node.js for the frontend build
         with:
           node-version: 26
-          cache: npm
+          cache: npm                       # reuse downloaded npm packages from earlier runs
           cache-dependency-path: tickgeek_frontend/package-lock.json
 
-      - run: npm ci
+      - run: npm ci                        # install the exact versions in package-lock.json
         working-directory: tickgeek_frontend
 
+      # Build the frontend here, the way Vercel would, so staging and production get the same files.
+      # The made-up project.json gives "vercel build" its settings without linking to a Vercel project.
       - name: Build frontend
         run: |
           mkdir -p .vercel
           echo '{"projectId":"unlinked","orgId":"unlinked","settings":{"framework":"nextjs","rootDirectory":"tickgeek_frontend"}}' > .vercel/project.json
           npx --yes "$VERCEL_CLI" build --prod --yes --standalone
 
+      # Put the release in one folder:
+      #   release/frontend       the built frontend
+      #   release/backend-image  the image name pinned by digest (@sha256:…), so the exact image is deployed
       - name: Collect release
         env:
           IMAGE: ${{ steps.image.outputs.name }}@${{ steps.push.outputs.digest }}
@@ -69,185 +71,94 @@ jobs:
           mv .vercel/output release/frontend
           echo "$IMAGE" > release/backend-image
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4   # store release/ in GitHub as artifact release-<commit>
         with:
           name: release-${{ github.sha }}
           path: release
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 90
+          include-hidden-files: true       # upload files whose name starts with "." too (skipped by default)
+          if-no-files-found: error         # fail if release/ is empty
+          retention-days: 90               # kept 90 days, so rollback.yml can go back that far
 
+  # 2. staging: deploy the new release to staging and check it answers
   staging:
-    needs: build
+    needs: build                           # wait for build to succeed
     runs-on: ubuntu-latest
     environment:
-      name: staging
-      url: ${{ vars.FRONTEND_URL }}
+      name: staging                        # use the staging environment's vars and secrets
+      url: ${{ vars.FRONTEND_URL }}        # link shown on the run page
     concurrency:
-      group: deploy-staging
-      cancel-in-progress: false
+      group: deploy-staging                # one staging deploy at a time
+      cancel-in-progress: false            # a new deploy waits; it never cancels a running one
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5          # copy files from the repo onto this machine
+        with:
+          sparse-checkout: .github/actions # only this folder, not the whole repo
+          sparse-checkout-cone-mode: false # really only this folder (no extra root files)
+          persist-credentials: false       # don't leave the GitHub token on the machine
+
+      - uses: actions/download-artifact@v4 # get the release that build stored, into release/
         with:
           name: release-${{ github.sha }}
           path: release
 
-      - name: Deploy backend
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
-        run: |
-          set -euo pipefail
-          api="https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys"
-          auth="Authorization: Bearer $RENDER_API_KEY"
-          body=$(jq -n --arg image "$(cat release/backend-image)" '{imageUrl: $image}')
-          deploy_id=$(curl -fsS -X POST -H "$auth" -H 'Content-Type: application/json' -d "$body" "$api" | jq -r .id)
-          echo "Render deploy $deploy_id"
-          for _ in $(seq 1 90); do
-            status=$(curl -fsS -H "$auth" "$api/$deploy_id" | jq -r .status)
-            case "$status" in
-              live) exit 0 ;;
-              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
-                echo "::error::Render deploy $deploy_id ended as $status"; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "::error::Render deploy $deploy_id not live after 15 minutes"; exit 1
+      # Deploy the backend to Render and wait until /api/health is UP,
+      # then deploy the frontend to Vercel and check /sign-in answers.
+      # The steps live in .github/actions/deploy-release/action.yml; vars and secrets are passed in here.
+      - uses: ./.github/actions/deploy-release
+        with:
+          render-api-key: ${{ secrets.RENDER_API_KEY }}
+          render-service-id: ${{ vars.RENDER_SERVICE_ID }}
+          backend-url: ${{ vars.BACKEND_URL }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
+          frontend-url: ${{ vars.FRONTEND_URL }}
+          vercel-cli: ${{ env.VERCEL_CLI }}   # from env at the top of this file
 
-      - name: Check backend health
-        env:
-          BACKEND_URL: ${{ vars.BACKEND_URL }}
-        run: |
-          for _ in $(seq 1 18); do
-            if curl -fsS --max-time 20 "$BACKEND_URL/api/health" | jq -e '.status == "UP"'; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::$BACKEND_URL/api/health is not UP"; exit 1
-
-      - name: Deploy frontend
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: |
-          mkdir -p .vercel tickgeek_frontend
-          mv release/frontend .vercel/output
-          npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
-
-      - name: Check frontend
-        env:
-          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
-        run: |
-          for _ in $(seq 1 12); do
-            if curl -fsS --max-time 20 -o /dev/null "$FRONTEND_URL/sign-in"; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::$FRONTEND_URL/sign-in does not answer"; exit 1
-
+  # 3. production: deploy the same release to production. If the production environment requires
+  #    approval, the job waits here until someone approves it.
+  #    No job-level permissions: the top-level contents: read covers the superseded check.
   production:
-    needs: [build, staging]
-    if: >-
-      !cancelled() && github.ref == 'refs/heads/main' &&
-      (needs.staging.result == 'success' || github.event_name == 'workflow_dispatch')
+    needs: staging                         # run only after staging succeeded
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      deployments: read
     environment:
-      name: production
-      url: ${{ vars.FRONTEND_URL }}
+      name: production                     # use the production environment's vars and secrets
+      url: ${{ vars.FRONTEND_URL }}        # link shown on the run page
     concurrency:
-      group: deploy-production
-      cancel-in-progress: false
+      group: deploy-production             # one production deploy at a time; rollback.yml shares it
+      cancel-in-progress: false            # never cancel a running deploy; a newer waiting one replaces an older waiting one
     steps:
-      - id: release
-        name: Choose release
+      - uses: actions/checkout@v5          # copy files from the repo onto this machine
+        with:
+          sparse-checkout: .github/actions # only this folder, not the whole repo
+          sparse-checkout-cone-mode: false # really only this folder (no extra root files)
+          persist-credentials: false       # don't leave the GitHub token on the machine
+
+      # Approval can come much later. If main has a newer commit by then,
+      # deploying this one could replace a newer release, so stop.
+      - name: Stop if superseded
         env:
           GH_TOKEN: ${{ github.token }}
-          ROLLBACK_TO: ${{ inputs.rollback_to }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-            if [ "$head" != "$GITHUB_SHA" ]; then
-              echo "::error::Superseded: main is now at $head. Approve the newest Deploy run instead."; exit 1
-            fi
-            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-            echo "run_id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
-            exit 0
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::error::Superseded: main is now at $head. Approve the newest Deploy run instead."; exit 1
           fi
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$ROLLBACK_TO" --jq .sha)
-          ok=""
-          for id in $(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=production&sha=$sha" --jq '.[] | select(.creator.login == "github-actions[bot]") | .id'); do
-            if [ "$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" --jq 'any(.[]; .state == "success")')" = true ]; then ok=1; break; fi
-          done
-          if [ -z "$ok" ]; then
-            echo "::error::$sha was never deployed to production successfully"; exit 1
-          fi
-          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=release-$sha" \
-            --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
-          if [ -z "$run_id" ]; then
-            echo "::error::No unexpired release-$sha artifact (kept 90 days)"; exit 1
-          fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4 # get this run's release into release/
         with:
-          name: release-${{ steps.release.outputs.sha }}
+          name: release-${{ github.sha }}
           path: release
-          run-id: ${{ steps.release.outputs.run_id }}
-          github-token: ${{ github.token }}
 
-      - name: Deploy backend
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
-        run: |
-          set -euo pipefail
-          api="https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys"
-          auth="Authorization: Bearer $RENDER_API_KEY"
-          body=$(jq -n --arg image "$(cat release/backend-image)" '{imageUrl: $image}')
-          deploy_id=$(curl -fsS -X POST -H "$auth" -H 'Content-Type: application/json' -d "$body" "$api" | jq -r .id)
-          echo "Render deploy $deploy_id"
-          for _ in $(seq 1 90); do
-            status=$(curl -fsS -H "$auth" "$api/$deploy_id" | jq -r .status)
-            case "$status" in
-              live) exit 0 ;;
-              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
-                echo "::error::Render deploy $deploy_id ended as $status"; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "::error::Render deploy $deploy_id not live after 15 minutes"; exit 1
-
-      - name: Check backend health
-        env:
-          BACKEND_URL: ${{ vars.BACKEND_URL }}
-        run: |
-          for _ in $(seq 1 18); do
-            if curl -fsS --max-time 20 "$BACKEND_URL/api/health" | jq -e '.status == "UP"'; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::$BACKEND_URL/api/health is not UP"; exit 1
-
-      - name: Deploy frontend
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: |
-          mkdir -p .vercel tickgeek_frontend
-          mv release/frontend .vercel/output
-          npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
-
-      - name: Check frontend
-        env:
-          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
-        run: |
-          for _ in $(seq 1 12); do
-            if curl -fsS --max-time 20 -o /dev/null "$FRONTEND_URL/sign-in"; then exit 0; fi
-            sleep 10
-          done
-          echo "::error::$FRONTEND_URL/sign-in does not answer"; exit 1
+      # Same deploy steps as staging, with the production environment's vars and secrets.
+      - uses: ./.github/actions/deploy-release
+        with:
+          render-api-key: ${{ secrets.RENDER_API_KEY }}
+          render-service-id: ${{ vars.RENDER_SERVICE_ID }}
+          backend-url: ${{ vars.BACKEND_URL }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
+          frontend-url: ${{ vars.FRONTEND_URL }}
+          vercel-cli: ${{ env.VERCEL_CLI }}   # from env at the top of this file

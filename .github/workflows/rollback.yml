@@ -1,0 +1,96 @@
+# Rollback: put an earlier release back on production.
+# Run it by hand from main: Actions → Rollback → Run workflow, with the commit to go back to.
+# Accepted only if that commit's Deploy run finished its production job and its release
+# artifact has not expired (kept 90 days). Database migrations are not undone.
+name: Rollback
+
+on:
+  workflow_dispatch:                       # manual run only
+    inputs:
+      rollback_to:
+        description: Commit SHA of a release that was live on production
+        required: true
+        type: string
+
+permissions:
+  contents: read                           # read the repo and its commits
+  actions: read                            # read Deploy runs, their jobs and their release artifacts
+
+env:
+  VERCEL_CLI: vercel@65.11.0               # keep the same as in deploy.yml
+
+jobs:
+  production:
+    if: github.ref == 'refs/heads/main'    # only when started from main
+    runs-on: ubuntu-latest
+    environment:
+      name: production                     # same vars, secrets and approval rules as deploy.yml
+      url: ${{ vars.FRONTEND_URL }}        # link shown on the run page
+    concurrency:
+      group: deploy-production             # same group as deploy.yml, so a rollback and a deploy never run at once
+      cancel-in-progress: false            # never cancel a running deploy; a newer waiting one replaces an older waiting one
+    steps:
+      - uses: actions/checkout@v5          # copy files from the repo onto this machine
+        with:
+          sparse-checkout: .github/actions # only this folder, not the whole repo
+          sparse-checkout-cone-mode: false # really only this folder (no extra root files)
+          persist-credentials: false       # don't leave the GitHub token on the machine
+
+      # Check rollback_to and output its full commit (sha) and the Deploy run that stored its release (run_id).
+      - id: release
+        name: Find release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK_TO: ${{ inputs.rollback_to }}
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+
+          # 1. Get the full commit SHA (rollback_to may be short)
+          if ! sha=$(gh api "$api/commits/$ROLLBACK_TO" --jq .sha); then
+            echo "::error::Unknown commit: $ROLLBACK_TO"; exit 1
+          fi
+
+          # 2. Find the Deploy run started by the push of that commit whose production job succeeded.
+          #    filter=all includes re-run attempts. That same run stored release-<sha>.
+          runs=$(gh api "$api/actions/workflows/deploy.yml/runs?event=push&head_sha=$sha&per_page=100" \
+            --jq '.workflow_runs[].id')
+          run_id=""
+          for id in $runs; do
+            succeeded=$(gh api "$api/actions/runs/$id/jobs?filter=all&per_page=100" \
+              --jq 'any(.jobs[]; .name == "production" and .conclusion == "success")')
+            if [ "$succeeded" = true ]; then run_id=$id; break; fi
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::$sha never finished the production job of a Deploy run"; exit 1
+          fi
+
+          # 3. Check its release artifact still exists
+          live=$(gh api "$api/actions/runs/$run_id/artifacts?name=release-$sha" \
+            --jq '[.artifacts[] | select(.expired | not)] | length')
+          if [ "$live" -eq 0 ]; then
+            echo "::error::release-$sha has expired (artifacts are kept 90 days)"; exit 1
+          fi
+
+          echo "Rolling back to $sha, released by Deploy run $run_id"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4 # get the chosen release into release/
+        with:
+          name: release-${{ steps.release.outputs.sha }}
+          path: release
+          run-id: ${{ steps.release.outputs.run_id }}   # the Deploy run that stored it
+          github-token: ${{ github.token }}             # needed to read another run's artifact
+
+      # Same deploy steps as deploy.yml, with the production environment's vars and secrets.
+      - uses: ./.github/actions/deploy-release
+        with:
+          render-api-key: ${{ secrets.RENDER_API_KEY }}
+          render-service-id: ${{ vars.RENDER_SERVICE_ID }}
+          backend-url: ${{ vars.BACKEND_URL }}
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
+          frontend-url: ${{ vars.FRONTEND_URL }}
+          vercel-cli: ${{ env.VERCEL_CLI }}   # from env at the top of this file
