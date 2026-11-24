@@ -21,6 +21,6 @@ public class DebugCodeController {
     @GetMapping("/codes")
     public List<String> codes(@RequestParam String email) {
         return jdbc.queryForList(
-                "SELECT code_hmac FROM verification_codes WHERE email = '" + email + "'", String.class);
+                "SELECT code_hmac FROM verification_codes WHERE email = ?", String.class, email);
     }
 }
