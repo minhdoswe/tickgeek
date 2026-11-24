@@ -2,6 +2,11 @@
 # Claude reviews every PR for bugs + OWASP Top 10 issues, posts inline comments,
 # and FAILS the check when it finds Critical/High problems.
 # Make this check "required" in branch protection to block merging.
+#
+# Correction PRs: on YOUR PRs with Critical/High/Medium findings, auto-merge is paused and a
+# second job lets Claude fix them on branch claude/fix-pr-<n>, opened as a PR into your branch.
+# Claude's own PRs (branch claude/… or a "Co-Authored-By: Claude" commit) never get one,
+# so a fix is never fixed again in a loop.
 
 name: Code Review
 
@@ -23,6 +28,9 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
+    outputs:
+      result: ${{ steps.review.outputs.structured_output }}   # verdict JSON, read by the correction job
+      correct: ${{ steps.plan.outputs.correct }}               # "true" when a correction PR should be made
 
     steps:
       - uses: actions/checkout@v6
@@ -75,6 +83,9 @@ jobs:
             Then post ONE summary comment with `gh pr comment` (use `--edit-last` if you
             already posted one on this PR) listing counts by severity and the verdict.
 
+            Also list every finding in the verdict's `findings` array (severity, file, line,
+            summary, fix), the same findings you commented on.
+
             Be precise: do not report style nits, and do not invent problems.
             Only mark CRITICAL/HIGH when you are confident.
 
@@ -84,7 +95,46 @@ jobs:
             --model claude-opus-5-5
             --max-turns 40
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
-            --json-schema '{"type":"object","properties":{"block_merge":{"type":"boolean"},"critical":{"type":"integer"},"high":{"type":"integer"},"medium":{"type":"integer"},"low":{"type":"integer"},"summary":{"type":"string"}},"required":["block_merge","critical","high","medium","low","summary"]}'
+            --json-schema '{"type":"object","properties":{"block_merge":{"type":"boolean"},"critical":{"type":"integer"},"high":{"type":"integer"},"medium":{"type":"integer"},"low":{"type":"integer"},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","properties":{"severity":{"type":"string","enum":["CRITICAL","HIGH","MEDIUM","LOW"]},"file":{"type":"string"},"line":{"type":"integer"},"summary":{"type":"string"},"fix":{"type":"string"}},"required":["severity","file","summary","fix"]}}},"required":["block_merge","critical","high","medium","low","summary","findings"]}'
+
+      # Decide whether a correction PR follows, and if so pause auto-merge on this PR NOW:
+      # the check passes when this job ends, so pausing later could lose the race with GitHub.
+      # Any failure here fails the job, so the check fails closed.
+      - name: Plan correction PR
+        id: plan
+        if: steps.review.outputs.structured_output != ''
+        env:
+          RESULT: ${{ steps.review.outputs.structured_output }}   # via env: it holds PR-derived text
+          GH_TOKEN: ${{ github.token }}                           # read the PR's commits
+          AUTO_PR_TOKEN: ${{ secrets.AUTO_PR_TOKEN }}             # pause auto-merge, as in auto-pr.yml
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          wanted=$(jq '.critical + .high + .medium' <<<"$RESULT")
+          messages=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/commits?per_page=100" --paginate --jq '.[].commit.message')
+          if [[ "$HEAD_REF" == claude/* ]] || grep -qi '^co-authored-by: claude' <<<"$messages"; then
+            echo "Claude's PR: no correction PR."; echo "correct=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$wanted" -eq 0 ]; then
+            echo "No Critical/High/Medium findings: no correction PR."; echo "correct=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "PR from a fork: no correction PR."; echo "correct=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          auto=$(GH_TOKEN=$AUTO_PR_TOKEN gh pr view "$PR" --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "$auto" = true ]; then
+            GH_TOKEN=$AUTO_PR_TOKEN gh pr merge "$PR" --disable-auto
+            still=$(GH_TOKEN=$AUTO_PR_TOKEN gh pr view "$PR" --json autoMergeRequest --jq '.autoMergeRequest != null')
+            if [ "$still" != false ]; then
+              echo "::error::Could not pause auto-merge on #$PR before the correction PR."; exit 1
+            fi
+          fi
+          echo "Auto-merge paused on #$PR: a correction PR follows. Merge it, then merge #$PR by hand."
+          echo "correct=true" >> "$GITHUB_OUTPUT"
 
       - name: Enforce verdict (fail = block merge)
         if: always()
@@ -119,3 +169,121 @@ jobs:
             exit 1
           fi
           echo "✅ No blocking issues."
+
+  # Fix Critical/High/Medium findings on YOUR PR, as a PR into your branch. Runs even when the
+  # review failed the check (Critical/High). A new push cancels this whole run (concurrency above).
+  correction:
+    needs: claude-review
+    if: ${{ !cancelled() && needs.claude-review.outputs.correct == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write        # push claude/fix-pr-<n> with GITHUB_TOKEN; such a push starts no workflows (no auto-pr)
+      pull-requests: read
+      id-token: write        # claude-code-action sign-in
+    env:
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      FIX_BRANCH: claude/fix-pr-${{ github.event.pull_request.number }}
+
+    steps:
+      - name: Skip if a correction PR is already open
+        id: open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          open=$(gh pr list --head "$FIX_BRANCH" --state open --json number --jq length)
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+          if [ "$open" != 0 ]; then echo "A correction PR from $FIX_BRANCH is already open."; fi
+
+      - if: steps.open.outputs.open == '0'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}   # your branch as reviewed
+          persist-credentials: false                       # no token on disk while Claude runs
+
+      - name: Write findings for Claude
+        if: steps.open.outputs.open == '0'
+        env:
+          RESULT: ${{ needs.claude-review.outputs.result }}   # via env: it holds PR-derived text
+        run: jq '[.findings[] | select(.severity != "LOW")]' <<<"$RESULT" > .claude-findings.json
+
+      - name: Fix findings
+        id: fix
+        if: steps.open.outputs.open == '0'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are running unattended in CI. The repository owner has set this job up to fix
+            code-review findings, so you may edit code here (this counts as their /impl).
+            Follow the other rules in CLAUDE.md.
+
+            Read .claude-findings.json: the Critical/High/Medium findings from the review of
+            this PR. For each one, make the smallest change that fixes it.
+
+            Skip a finding instead of fixing it, and say why, when the fix:
+            - needs a design decision with more than one valid option,
+            - changes the database schema, edits an applied Flyway migration, or reverses a
+              decision in specs/ or the constitution,
+            - would touch anything under .github/.
+            Never edit .claude-findings.json. Do not commit; the workflow commits for you.
+
+            Your final answer must be the JSON result: what you fixed and what you skipped.
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 60
+            --allowedTools "Read,Edit,Write,Glob,Grep"
+            --json-schema '{"type":"object","properties":{"fixed":{"type":"array","items":{"type":"string"}},"skipped":{"type":"array","items":{"type":"object","properties":{"finding":{"type":"string"},"reason":{"type":"string"}},"required":["finding","reason"]}}},"required":["fixed","skipped"]}'
+
+      - name: Commit, push and open the correction PR
+        if: steps.open.outputs.open == '0'
+        env:
+          PUSH_TOKEN: ${{ github.token }}               # push: starts no workflows, so auto-pr stays out
+          GH_TOKEN: ${{ secrets.AUTO_PR_TOKEN }}        # open the PR as you, so claude-review and CI run on it
+          BASE: ${{ github.head_ref }}
+          OUT: ${{ steps.fix.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+          rm -f .claude-findings.json
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Claude made no changes: no correction PR."; exit 0
+          fi
+          # Read the list into a variable first: under pipefail, "git diff | grep -q" can fail on
+          # SIGPIPE when grep stops early, which would hide a match and let .github/ changes through.
+          changed=$(git diff --cached --name-only)
+          if grep -q '^\.github/' <<<"$changed"; then
+            echo "::error::The fix touches .github/. Not pushed; fix #$PR by hand."; exit 1
+          fi
+
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -F - <<EOF
+          fix claude-review findings on #$PR
+
+          Co-Authored-By: Claude <noreply@anthropic.com>
+          EOF
+          # Force: no correction PR is open (checked above), so the branch is a leftover at most.
+          git push --force "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$FIX_BRANCH"
+
+          out=${OUT:-}
+          [ -n "$out" ] || out='{}'
+          {
+            echo "Fixes the Critical/High/Medium claude-review findings on #$PR."
+            echo
+            echo "Auto-merge on #$PR is paused. Merge this PR into \`$BASE\`, then merge #$PR by hand."
+            echo
+            echo "### Fixed"
+            jq -r '(.fixed // [])[] | "- \(.)"' <<<"$out"
+            echo
+            echo "### Skipped (fix by hand)"
+            jq -r '(.skipped // [])[] | "- \(.finding): \(.reason)"' <<<"$out"
+          } > "$RUNNER_TEMP/body.md"
+          url=$(gh pr create --base "$BASE" --head "$FIX_BRANCH" \
+            --title "Fix claude-review findings on #$PR" --body-file "$RUNNER_TEMP/body.md")
+          gh pr comment "$PR" --body "Correction PR: $url. Auto-merge on this PR is paused; merge the correction first, then this PR by hand."
