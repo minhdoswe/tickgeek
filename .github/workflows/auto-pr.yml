@@ -39,9 +39,17 @@ jobs:
           # on SIGPIPE when grep stops early, which would hide a match.
           messages=$(git log --format=%B origin/main..HEAD)
           if [[ "$GITHUB_REF_NAME" == claude/* ]] || grep -qi '^co-authored-by: claude' <<<"$messages"; then
+            # Read the state in its own assignment, so a failed gh call stops the step (set -e)
+            # instead of reading as "off". A red step is visible, but it does not block a merge.
+            auto=$(gh pr view "$GITHUB_REF_NAME" --json autoMergeRequest --jq '.autoMergeRequest != null')
+            if [ "$auto" = true ]; then
+              gh pr merge "$GITHUB_REF_NAME" --disable-auto
+              still=$(gh pr view "$GITHUB_REF_NAME" --json autoMergeRequest --jq '.autoMergeRequest != null')
+              if [ "$still" != false ]; then
+                echo "::error::Auto-merge is still on for Claude's PR. Turn it off by hand."; exit 1
+              fi
+            fi
             echo "Claude's work: auto-merge off. Merge this PR by hand after reading claude-review."
-            # Fails when auto-merge was never on; that is the state we want, so ignore it.
-            gh pr merge "$GITHUB_REF_NAME" --disable-auto || true
           else
             gh pr merge "$GITHUB_REF_NAME" --auto --merge
           fi
