@@ -19,15 +19,29 @@ jobs:
         with:
           fetch-depth: 0 # --fill reads the commits between main and this branch
 
-      - name: Open PR and enable auto-merge if none is open
+      # Open a PR for this branch if none is open, then set auto-merge on every push:
+      #   Claude's work (branch claude/…, or any commit since main with a "Co-Authored-By: Claude"
+      #   trailer): auto-merge off, so the PR waits for you to read claude-review and merge by hand.
+      #   Anything else: auto-merge on; GitHub merges (merge commit) once main's required checks pass.
+      - name: Open PR and set auto-merge
         env:
           GH_TOKEN: ${{ secrets.AUTO_PR_TOKEN }} # fine-grained PAT, so the PR is opened as you
         run: |
+          set -euo pipefail
           open=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq length)
           if [ "$open" = 0 ]; then
             gh pr create --base main --head "$GITHUB_REF_NAME" --fill
-            # GitHub merges the PR (merge commit) once main's required checks pass.
-            gh pr merge "$GITHUB_REF_NAME" --auto --merge
           else
             echo "A PR for $GITHUB_REF_NAME is already open"
+          fi
+
+          # Read the log into a variable first: piping git log into grep -q under pipefail can fail
+          # on SIGPIPE when grep stops early, which would hide a match.
+          messages=$(git log --format=%B origin/main..HEAD)
+          if [[ "$GITHUB_REF_NAME" == claude/* ]] || grep -qi '^co-authored-by: claude' <<<"$messages"; then
+            echo "Claude's work: auto-merge off. Merge this PR by hand after reading claude-review."
+            # Fails when auto-merge was never on; that is the state we want, so ignore it.
+            gh pr merge "$GITHUB_REF_NAME" --disable-auto || true
+          else
+            gh pr merge "$GITHUB_REF_NAME" --auto --merge
           fi
