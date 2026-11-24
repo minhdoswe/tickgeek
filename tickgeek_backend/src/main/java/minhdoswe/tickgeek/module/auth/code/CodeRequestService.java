@@ -3,6 +3,7 @@ package minhdoswe.tickgeek.module.auth.code;
 import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.stereotype.Service;
@@ -57,9 +58,9 @@ public class CodeRequestService {
         enforceLimits(context);
         codes.invalidateLive(context.email());
         String code = generator.next();
-        VerificationCode saved = codes.save(VerificationCode.pending(context, hasher.hash(context.email(), code)));
         String payload = composer.toPayload(new CodeEmailPayload(context.email(), code));
-        emailQueue.enqueue(saved.getId(), payload, context.now());
+        UUID outboxId = emailQueue.enqueue(payload, context.now());
+        codes.save(VerificationCode.pending(context, hasher.hash(context.email(), code), outboxId));
         return new CodeRequestResponse(
                 context.email(), properties.codeValidMinutes(), cooldown.nextAllowedAt(context.now()));
     }

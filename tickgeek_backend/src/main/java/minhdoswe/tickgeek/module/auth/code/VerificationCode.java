@@ -1,6 +1,7 @@
 package minhdoswe.tickgeek.module.auth.code;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -48,16 +49,20 @@ public class VerificationCode {
     @Column(name = "used_at")
     private Instant usedAt;
 
+    @Column(name = "outbox_id")
+    private UUID outboxId;
+
     protected VerificationCode() {
     }
 
-    public static VerificationCode pending(CodeRequestContext request, String codeHmac) {
+    public static VerificationCode pending(CodeRequestContext request, String codeHmac, UUID outboxId) {
         VerificationCode code = new VerificationCode();
         code.email = request.email();
         code.requestSource = request.source();
         code.createdAt = request.now();
         code.codeHmac = codeHmac;
         code.status = CodeStatus.PENDING;
+        code.outboxId = outboxId;
         return code;
     }
 
@@ -87,5 +92,9 @@ public class VerificationCode {
 
     public Instant getExpiresAt() {
         return expiresAt;
+    }
+
+    public UUID getOutboxId() {
+        return outboxId;
     }
 }

@@ -1,6 +1,7 @@
 package minhdoswe.tickgeek.module.email;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -19,8 +20,9 @@ public class CodeEmailQueue {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public void enqueue(Long verificationCodeId, String payload, Instant now) {
-        Outbox job = outboxes.save(Outbox.forCode(verificationCodeId, payload, now));
+    public UUID enqueue(String payload, Instant now) {
+        Outbox job = outboxes.save(Outbox.pending(payload, now));
         events.publishEvent(OutboxJobScheduled.now(job.getId()));
+        return job.getId();
     }
 }

@@ -23,8 +23,9 @@ PostgreSQL JDBC driver; Next.js 16.4.6 (App Router, Server Actions), React 19.3.
 `pom.xml` also declares the REST client and OAuth2 Resource Server starters, which no code
 uses yet.
 
-**Storage**: PostgreSQL; schema in Flyway migrations `V1__create_ticket_system.sql` and
-`V2__index_outboxes_verification_code_id.sql` (R15)
+**Storage**: PostgreSQL; schema in Flyway migrations `V1__create_ticket_system.sql`,
+`V2__index_outboxes_verification_code_id.sql` and `V3__add_verification_codes_outbox_id.sql`
+(R15)
 
 **Testing**: JUnit 5, Mockito, Spring Boot Test + MockMvc, Testcontainers (PostgreSQL),
 Awaitility; unit tests run with Surefire, `*IT` classes with Failsafe; JaCoCo 80% line coverage
@@ -90,7 +91,8 @@ tickgeek_backend/
 │   ├── application-local.yaml                # dev-only secret, relaxed limits
 │   └── db/migration/
 │       ├── V1__create_ticket_system.sql      # verification_codes, outboxes
-│       └── V2__index_outboxes_verification_code_id.sql  # FK index (R15)
+│       ├── V2__index_outboxes_verification_code_id.sql  # FK index (R15)
+│       └── V3__add_verification_codes_outbox_id.sql     # code → outbox link, release 1 of 2 (R15)
 ├── src/main/java/minhdoswe/tickgeek/
 │   ├── TickgeekApplication.java
 │   ├── common/
