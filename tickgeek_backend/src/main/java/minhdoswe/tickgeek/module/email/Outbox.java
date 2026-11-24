@@ -44,11 +44,15 @@ public class Outbox {
     @Column(nullable = false, columnDefinition = "outbox_status")
     private OutboxStatus status;
 
+    @Column(name = "verification_code_id")
+    private Long verificationCodeId;
+
     protected Outbox() {
     }
 
-    public static Outbox pending(String payload, Instant now) {
+    public static Outbox forCode(Long verificationCodeId, String payload, Instant now) {
         Outbox job = new Outbox();
+        job.verificationCodeId = verificationCodeId;
         job.payload = payload;
         job.createdAt = now;
         job.nextAttemptAt = now;
@@ -70,5 +74,9 @@ public class Outbox {
 
     public int getAttempts() {
         return attempts;
+    }
+
+    public Long getVerificationCodeId() {
+        return verificationCodeId;
     }
 }

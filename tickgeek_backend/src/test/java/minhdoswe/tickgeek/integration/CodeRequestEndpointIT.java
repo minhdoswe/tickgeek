@@ -20,7 +20,7 @@ class CodeRequestEndpointIT extends AbstractIntegrationTest {
      * the user gets a code email and the next screen can show the right details.
      * <p>
      * Cases: " Ana@Example.com " → 202 with email "ana@example.com", 10 minutes and resend at
-     * 10:01:00; one live code pointing to its outbox job, and the caller's IP, are stored
+     * 10:01:00; one live code, one outbox job and the caller's IP are stored
      * (specs/001-request-code/contracts/auth-api.md POST /api/auth/code-requests;
      * specs/001-request-code/spec.md FR-002, FR-003).
      */
@@ -33,11 +33,10 @@ class CodeRequestEndpointIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.codeValidMinutes").value(10))
                 .andExpect(jsonPath("$.resendAvailableAt").value("2026-11-11T10:01:00Z"));
 
-        // Then: one live code pointing to its queued email, and the request source, were stored
+        // Then: one live code, one queued email and the request source were stored
         assertThat(count("SELECT count(*) FROM verification_codes WHERE email = 'ana@example.com' AND status IN ('PENDING', 'ACTIVE')"))
                 .isEqualTo(1);
-        assertThat(count("SELECT count(*) FROM verification_codes vc JOIN outboxes o ON o.id = vc.outbox_id"))
-                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM outboxes WHERE verification_code_id IS NOT NULL")).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT request_source FROM verification_codes", String.class))
                 .isEqualTo(DEFAULT_SOURCE);
     }

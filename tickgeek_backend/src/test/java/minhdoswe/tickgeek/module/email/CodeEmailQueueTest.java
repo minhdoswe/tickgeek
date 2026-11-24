@@ -27,10 +27,9 @@ class CodeEmailQueueTest {
      * Proves queuing an email first saves a PENDING outbox row, so a code email isn't lost when
      * sending fails: the row records what still has to go out.
      * <p>
-     * Cases: enqueue a payload → a PENDING row with the payload is saved, its id is returned so
-     * the code can point to it, and an event to send that row now is published with the id it
-     * got on save. The event only starts the send once the request commits
-     * (specs/001-request-code/research.md R9).
+     * Cases: enqueue for code 9 → a PENDING row linked to code 9 with the payload is saved, and
+     * an event to send that row now is published with the id it got on save. The event only
+     * starts the send once the request commits (specs/001-request-code/research.md R9).
      */
     @Test
     void savesAPendingJobAndAnnouncesItForNow() {
@@ -41,15 +40,15 @@ class CodeEmailQueueTest {
             return job;
         });
 
-        // When: an email is queued
-        UUID returned = queue.enqueue("{payload}", NOW);
+        // When: an email for code 9 is queued
+        queue.enqueue(9L, "{payload}", NOW);
 
-        // Then: a PENDING row with the payload was saved, and its id was returned
+        // Then: a PENDING row linked to code 9 with the payload was saved
         ArgumentCaptor<Outbox> saved = ArgumentCaptor.forClass(Outbox.class);
         verify(outboxes).save(saved.capture());
         assertThat(saved.getValue().getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(saved.getValue().getVerificationCodeId()).isEqualTo(9L);
         assertThat(saved.getValue().getPayload()).isEqualTo("{payload}");
-        assertThat(returned).isEqualTo(SAVED_ID);
         // Then: an event to send that row now was published with the id set on save
         verify(events).publishEvent(OutboxJobScheduled.now(SAVED_ID));
     }

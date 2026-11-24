@@ -1,8 +1,7 @@
 # Data Model: Email Code Sign-In: Request a Code
 
-Created by Flyway migrations `V1__create_ticket_system.sql`,
-`V2__index_outboxes_verification_code_id.sql` and `V3__add_verification_codes_outbox_id.sql`
-(see [research.md](research.md) R15).
+Created by Flyway migrations `V1__create_ticket_system.sql` and
+`V2__index_outboxes_verification_code_id.sql` (see [research.md](research.md) R15).
 All timestamps are `TIMESTAMPTZ`. Emails are always stored normalized (trimmed, lowercase).
 
 ## verification_codes
@@ -19,11 +18,8 @@ All timestamps are `TIMESTAMPTZ`. Emails are always stored normalized (trimmed, 
 | sent_at | timestamptz | NULL |
 | expires_at | timestamptz | NULL; CHECK `status <> 'ACTIVE' OR expires_at IS NOT NULL` (R16) |
 | used_at | timestamptz | NULL |
-| outbox_id | uuid | NULL for now (NOT NULL in release 2), FK → outboxes.id, no ON DELETE action; the code's email job (V3, R9) |
 
 Indexes:
-- UNIQUE `(outbox_id)` (V3): one outbox per code, and serves the foreign key check when outboxes
-  are deleted
 - partial UNIQUE `(email) WHERE status IN ('PENDING', 'ACTIVE')`: one live code per email (R4)
 - `(email, created_at)`: cooldown and per-email limit
 - `(request_source, created_at)`: per-source limit
@@ -51,14 +47,13 @@ in the schema but not written by any code yet.
 | next_attempt_at | timestamptz | NOT NULL DEFAULT now(); set to the request time |
 | last_error | text | NULL |
 | status | `outbox_status` enum | NOT NULL: `PENDING`, `SENT`, `ERROR`, `CANCELLED` |
-| verification_code_id | bigint | NULL, FK → verification_codes.id. Old link, no longer written by the app (not mapped); kept only for the backend running during the release 1 deploy, dropped in release 2 (R15) |
+| verification_code_id | bigint | NULL, FK → verification_codes.id; set for code emails |
 
 Indexes:
 - partial `(verification_code_id) WHERE verification_code_id IS NOT NULL` (V2): serves the
-  foreign key check when codes are deleted (R15); dropped with the column in release 2
+  foreign key check when codes are deleted (R15)
 
-The code request inserts one `PENDING` row per code, before the code that points to it (R9).
-No code changes a row after that yet.
+The code request inserts one `PENDING` row per code (R9). No code changes a row after that yet.
 
 ## In-process job event (not stored)
 
@@ -69,7 +64,7 @@ No code changes a row after that yet.
 ## Relationships
 
 ```text
-verification_codes 1 ──── 1 outboxes (by verification_codes.outbox_id; an outbox may have no code)
+verification_codes 1 ──── * outboxes (by verification_code_id)
 ```
 
 Codes are keyed by email only, so nothing about account existence is needed (R7).

@@ -15,15 +15,15 @@ class ApplicationContextIT extends AbstractIntegrationTest {
      * Proves the app starts on a real PostgreSQL with every migration applied and entities that
      * match the tables, so a schema mistake fails the build instead of production.
      * <p>
-     * Cases: latest Flyway version → "3". Hibernate runs with ddl-auto=validate, so a mismatched
+     * Cases: latest Flyway version → "2". Hibernate runs with ddl-auto=validate, so a mismatched
      * mapping fails startup before this test runs
      * (specs/001-request-code/research.md R14, R15).
      */
     @Test
     void schemaIsMigrated() {
-        // When / Then: V3 is the latest applied migration
+        // When / Then: V2 is the latest applied migration
         assertThat(jdbc.queryForObject("SELECT max(version) FROM flyway_schema_history", String.class))
-                .isEqualTo("3");
+                .isEqualTo("2");
     }
 
     /**
