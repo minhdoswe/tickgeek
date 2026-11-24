@@ -109,8 +109,9 @@ remain.
 
 ## R9. Queuing the code email
 
-- **Decision**: The code request saves an `outboxes` row in the same transaction, linked to its
-  code by `outboxes.verification_code_id`. Its payload is JSON `{"to": …, "code": …}`, and it
+- **Decision**: The code request saves an `outboxes` row in the same transaction, and the code
+  points to it by `verification_codes.outbox_id`, one outbox per code (unique). The outbox is
+  saved first and `CodeEmailQueue.enqueue` returns its id. Its payload is JSON `{"to": …, "code": …}`, and it
   starts `PENDING` with `next_attempt_at` = the request time. `CodeEmailQueue` then publishes a
   Spring application event `OutboxJobScheduled(outboxId, delay = 0)`. The event carries only the
   outbox id, never the email or the code. Nothing listens for the event yet.
@@ -122,6 +123,12 @@ remain.
 - **Rationale**: The code and its email job commit or roll back together, so a code never exists
   without its email job, and the request returns without waiting for an email provider. The
   plaintext code is kept only in the unsent payload.
+- **Link direction** (revised 2026-11-24): a code always needs an outbox, but an outbox doesn't
+  always belong to a code, so the code holds the link and the email module knows nothing about
+  codes. The foreign key has no `ON DELETE` action: an outbox can't be deleted while a code
+  points to it, so a future outbox cleanup must delete the codes first.
+- **Previous decision** (until 2026-11-24): `outboxes.verification_code_id` linked each outbox to
+  its code (one code, many outboxes allowed).
 - **Alternatives considered**: Sending inside the request (slow, and leaks delivery failures as
   timing differences).
 
@@ -170,6 +177,18 @@ remain.
   every delete from `verification_codes` scanned all of `outboxes`: deleting 200 codes took 45.7 s
   against 2M outboxes, and 11.6 ms with the index. `ApplicationContextIT` fails if any foreign
   key column is left without an index.
+- **Changes on a live database** (added 2026-11-24): production is live, and during a deploy the
+  old backend keeps serving while the new one runs its migration. So a migration must work with
+  both the backend before it and the one after it: add first, remove in a later release
+  (expand, then contract). Reversing the code ↔ outbox link (R9) takes two releases:
+  - Release 1, `V3__add_verification_codes_outbox_id.sql`: adds `verification_codes.outbox_id`
+    (nullable, FK, unique index), copies the existing links from
+    `outboxes.verification_code_id`, and keeps the old column. The new backend writes only
+    `outbox_id` and no longer maps `verification_code_id`. `OutboxLinkMigrationIT` checks the copy
+    and that the old backend's writes still work after V3.
+  - Release 2 (not done yet, deploy only once release 1 is fully live): copies again to catch
+    codes the old backend created during the release 1 deploy, sets `outbox_id` NOT NULL, and
+    drops `outboxes.verification_code_id` with its V2 index.
 - **Previous decision** (until 2026-11-20): one migration, V1 only, edited in place, because no
   database with an older schema was kept.
 

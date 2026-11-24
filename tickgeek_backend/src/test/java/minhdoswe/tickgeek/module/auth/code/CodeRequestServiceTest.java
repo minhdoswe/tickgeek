@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ class CodeRequestServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-11-11T10:00:00Z");
     private static final String SOURCE = "1.2.3.4";
+    private static final UUID OUTBOX_ID = UUID.fromString("019a7a2c-0000-7000-8000-000000000009");
 
     private final CodeRequestLockRepository lock = mock(CodeRequestLockRepository.class);
     private final CodeRequestLimit limit = mock(CodeRequestLimit.class);
@@ -63,30 +65,35 @@ class CodeRequestServiceTest {
      * and a database leak reveals no codes.
      * <p>
      * Cases: "  Ana@Example.com " → response for "ana@example.com" with 10 minutes and resend at
-     * +60 s; lock → limits → invalidate older codes → save a PENDING code with only its HMAC →
-     * queue the email with the plain code (specs/001-request-code/research.md R3, R5;
+     * +60 s; lock → limits → invalidate older codes → queue the email with the plain code →
+     * save a PENDING code with only its HMAC, pointing to the queued outbox. The outbox is saved
+     * first because the code references it (specs/001-request-code/research.md R3, R5, R9;
      * specs/001-request-code/spec.md FR-006).
      */
     @Test
     void issuesAPendingHashedCodeAndQueuesTheEmail() {
+        // Given: queuing the email returns the outbox id
+        when(emailQueue.enqueue(any(), any())).thenReturn(OUTBOX_ID);
+
         // When: a code is requested for an email with spaces and capitals (no limit is hit, see setUp)
         CodeRequestResponse response = service.request("  Ana@Example.com ", SOURCE);
 
         // Then: the response has the normalized email, 10 minutes and the 60-second cooldown
         assertThat(response).isEqualTo(new CodeRequestResponse("ana@example.com", 10, NOW.plusSeconds(60)));
-        // Then: lock, limits, invalidate and save ran in this order
-        InOrder order = inOrder(lock, limit, codes);
+        // Then: lock, limits, invalidate, queue and save ran in this order
+        InOrder order = inOrder(lock, limit, codes, emailQueue);
         order.verify(lock).acquire("ana@example.com");
         order.verify(limit).check(new CodeRequestContext("ana@example.com", SOURCE, NOW));
         order.verify(codes).invalidateLive("ana@example.com");
+        order.verify(emailQueue).enqueue("{payload}", NOW);
         ArgumentCaptor<VerificationCode> code = ArgumentCaptor.forClass(VerificationCode.class);
         order.verify(codes).save(code.capture());
-        // Then: the saved code is PENDING and holds only the hash
+        // Then: the email payload carries the plain code
+        verify(composer).toPayload(new CodeEmailPayload("ana@example.com", "042317"));
+        // Then: the saved code is PENDING, holds only the hash and points to the queued outbox
         assertThat(code.getValue().getStatus()).isEqualTo(CodeStatus.PENDING);
         assertThat(code.getValue().getCodeHmac()).isEqualTo(hasher.hash("ana@example.com", "042317"));
-        // Then: the email payload carries the plain code and is queued for the saved code
-        verify(composer).toPayload(new CodeEmailPayload("ana@example.com", "042317"));
-        verify(emailQueue).enqueue(code.getValue().getId(), "{payload}", NOW);
+        assertThat(code.getValue().getOutboxId()).isEqualTo(OUTBOX_ID);
     }
 
     /**
@@ -129,7 +136,7 @@ class CodeRequestServiceTest {
                     assertThat(exception.retryAfterSeconds()).isEmpty();
                 });
         // Then: no email was queued
-        verify(emailQueue, never()).enqueue(any(), any(), any());
+        verify(emailQueue, never()).enqueue(any(), any());
     }
 
     /**
