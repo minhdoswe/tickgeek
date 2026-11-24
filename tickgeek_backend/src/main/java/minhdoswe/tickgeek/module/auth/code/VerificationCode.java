@@ -49,7 +49,7 @@ public class VerificationCode {
     @Column(name = "used_at")
     private Instant usedAt;
 
-    @Column(name = "outbox_id")
+    @Column(name = "outbox_id", nullable = false)
     private UUID outboxId;
 
     protected VerificationCode() {

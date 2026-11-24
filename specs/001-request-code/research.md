@@ -186,9 +186,15 @@ remain.
     `outboxes.verification_code_id`, and keeps the old column. The new backend writes only
     `outbox_id` and no longer maps `verification_code_id`. `OutboxLinkMigrationIT` checks the copy
     and that the old backend's writes still work after V3.
-  - Release 2 (not done yet, deploy only once release 1 is fully live): copies again to catch
-    codes the old backend created during the release 1 deploy, sets `outbox_id` NOT NULL, and
-    drops `outboxes.verification_code_id` with its V2 index.
+  - Release 2, `V4__require_verification_codes_outbox_id.sql` (deploy only once release 1 is
+    fully live): copies again to catch codes the old backend created during the release 1
+    deploy, sets `outbox_id` NOT NULL, and drops `outboxes.verification_code_id` with its V2
+    index. `VerificationCode.outboxId` is mapped `nullable = false`. `OutboxLinkMigrationIT`
+    checks the late copy, that a code without an outbox is refused, that the old column and
+    index are gone, and that the release 1 backend's writes still work after V4. Before
+    deploying, this must return 0 on production, or `SET NOT NULL` fails and the deploy rolls
+    back: `SELECT count(*) FROM verification_codes vc WHERE vc.outbox_id IS NULL AND NOT EXISTS
+    (SELECT 1 FROM outboxes o WHERE o.verification_code_id = vc.id)`.
 - **Previous decision** (until 2026-11-20): one migration, V1 only, edited in place, because no
   database with an older schema was kept.
 
