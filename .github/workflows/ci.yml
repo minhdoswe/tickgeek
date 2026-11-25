@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, production]
+    branches: [production]
   workflow_call:                           # lets deploy.yml run CI as a job before deploying
 
 permissions:
