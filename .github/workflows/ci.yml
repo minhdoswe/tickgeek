@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main, production]
+  workflow_call:                           # lets deploy.yml run CI as a job before deploying
 
 permissions:
   contents: read
