@@ -12,6 +12,11 @@ env:
   VERCEL_CLI: vercel@65.11.0               # Vercel CLI version, set once for every job
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      pull-requests: write   # ci.yml asks for this; a called workflow can't get more than the caller gives
   # 1. build: make one release (backend image + frontend files) that staging and production share
   build:
     runs-on: ubuntu-latest
@@ -81,7 +86,7 @@ jobs:
 
   # 2. staging: deploy the new release to staging and check it answers
   staging:
-    needs: build                           # wait for build to succeed
+    needs: [ci, build]                     # wait for CI and build to succeed
     runs-on: ubuntu-latest
     environment:
       name: staging                        # use the staging environment's vars and secrets
