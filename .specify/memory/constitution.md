@@ -1,21 +1,3 @@
-<!--
-Sync Impact Report
-- Version change: 1.1.0 → 2.0.0 (MAJOR: Principle III loses two rules and is redefined)
-- Modified principles: III. DRY, KISS, YAGNI → III. DRY. Removed "Implement the simplest
-  solution that satisfies the current requirement" and "Speculative abstractions, extension
-  points, or configuration added for hypothetical future needs MUST NOT be introduced".
-  Rationale rewritten for the remaining single-source-of-truth rule.
-- Added principles: none
-- Added sections: none
-- Removed sections: none
-- Dependent artifacts: specs/001-email-code-auth/plan.md's Constitution Check row still reads
-  "III. DRY, KISS, YAGNI | Simplest working solution, no speculative abstractions", and
-  research.md cites constitution III / YAGNI (e.g. R5's single global lock); both are revised
-  by the next /speckit-plan run, not here
-- Deferred TODOs: none
-- Note: this report is review scratch material; remove it before committing.
--->
-
 # TickGeek Constitution
 
 ## Core Principles
@@ -25,9 +7,6 @@ Sync Impact Report
 - Names MUST reveal intent: classes, methods, variables, and files are named for what they do or
   hold, without unexplained abbreviations.
 - A function or method body MUST be ≤ 30 lines.
-- A function or method MUST take ≤ 3 parameters; group related values into a parameter object or
-  record when more are needed. Record/DTO canonical constructors and framework-mandated
-  signatures are exempt.
 - Magic numbers and strings MUST NOT appear in logic; use named constants, enums, or
   externalized configuration.
 - Dead code and commented-out code MUST NOT be merged.
@@ -85,9 +64,9 @@ the frontend consistent with the backend contract.
 ## Development Workflow & Quality Gates
 
 - Work follows the Spec Kit flow: specify → (clarify) → plan → tasks → implement. Each plan MUST
-  pass a Constitution Check against Principles I–V.
+  pass a Constitution Check against Principles I–VI.
 - A change MUST NOT merge unless its tests pass, the 80% new-code coverage gate is met, and it
-  complies with Principles I–V.
+  complies with Principles I–VI.
 - Any deviation from a principle MUST be justified in the plan's Complexity Tracking table and
   noted in the pull request.
 
@@ -102,4 +81,4 @@ the frontend consistent with the backend contract.
 - Every pull request and every plan's Constitution Check MUST verify compliance; reviewers MUST
   block violations that lack a recorded justification.
 
-**Version**: 2.0.0 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-16
+**Version**: 2.2.0 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-26
