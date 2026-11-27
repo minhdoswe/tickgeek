@@ -32,12 +32,13 @@
 - When you can't verify something, say what would confirm it (a log to read, a command to
   run, a doc to check) rather than presenting a guess as fact.
 
-## Explanations
+## Load the Postgres skill for database work
 
-- Answer the WHY/WHAT (purpose, role in the system) before the HOW, unless I ask for mechanics.
-- Start at normal developer level. If I say "I don't get it", simplify ONCE for that answer,
-  then go back to normal depth. Don't stay in ELI5 mode.
-- Don't invent hypothetical bug scenarios. Only claim a bug if you can point to the exact code
-  path, and say how confident you are.
-- Keep Javadoc/comments short. Explain purpose, and don't paste long spec citations unless
-  asked.
+- Before proposing, reviewing or writing anything that touches Postgres, load the
+  `supabase-postgres-best-practices` skill (`.claude/skills/`) and follow its rules. That covers
+  Flyway migrations, entity or column changes, repository methods (derived names, `@Query`,
+  native SQL), transactions and locking, and datasource or Hikari config.
+- Name the rule file (e.g. `references/lock-skip-locked.md`) when a proposal or review relies
+  on it.
+- Schema changes go in a new `V<n>__*.sql` migration. Never edit a migration that has already
+  been applied.

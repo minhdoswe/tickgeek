@@ -47,17 +47,5 @@ tickgeek:
       per-source-per-hour: 20
       global-per-hour: 1000
     code-secret: ${TICKGEEK_AUTH_CODE_SECRET}
-  email:
-    max-attempts: 5
-    retry-base-delay: 5s
-    # Used outside the `local` profile. An empty api-key or sender-email stops startup.
-    # The sender address must be a sender verified in the Brevo account.
-    brevo:
-      base-url: https://api.brevo.com/v3
-      api-key: ${BREVO_API_KEY:}
-      sender-email: ${BREVO_SENDER_EMAIL:}
-      sender-name: TickGeek
-      connect-timeout: 2s
-      read-timeout: 3s
   frontend:
     secret: ${FRONTEND_SECRET}

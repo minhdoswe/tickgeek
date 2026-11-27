@@ -23,7 +23,6 @@ services:
       SPRING_PROFILES_ACTIVE: local
       TICKGEEK_DB_URL: jdbc:postgresql://postgres:5432/tickgeek
       FRONTEND_SECRET: dev-only-frontend-secret-at-least-32-bytes
-      TICKGEEK_AUTH_CODE_SECRET: dev-only-code-secret-at-least-32-bytes-long
     ports:
       - "8080:8080"
     depends_on:
