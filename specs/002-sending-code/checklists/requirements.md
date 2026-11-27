@@ -33,6 +33,6 @@
 
 - The three [NEEDS CLARIFICATION] markers were resolved on 2026-11-25 (see the spec's
   Clarifications): seconds, cancel the replaced code's job, stop at once on a rejected address.
-- Brevo and MailerSend are named because the user chose them as providers (a business choice),
-  not as an implementation detail.
+- Brevo is named because the user chose it as the provider (a business choice), not as an
+  implementation detail. MailerSend was dropped on 2026-11-26.
 - The 001 event name (`OutboxJobScheduled`) appears only in the quoted user input.
