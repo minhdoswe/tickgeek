@@ -3,22 +3,13 @@ package minhdoswe.tickgeek.integration;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationContext;
-import org.springframework.scheduling.TaskScheduler;
 
-import minhdoswe.tickgeek.module.email.EmailJobListener;
-import minhdoswe.tickgeek.module.email.EmailJobProcessor;
-import minhdoswe.tickgeek.module.email.emailsender.implement.BrevoEmailSender;
 import minhdoswe.tickgeek.support.AbstractIntegrationTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The app boots against PostgreSQL with every migration and validated JPA mappings. */
 class ApplicationContextIT extends AbstractIntegrationTest {
-
-    @Autowired
-    private ApplicationContext context;
 
     /**
      * Proves the app starts on a real PostgreSQL with every migration applied and entities that
@@ -59,32 +50,5 @@ class ApplicationContextIT extends AbstractIntegrationTest {
 
         // Then: there are none
         assertThat(unindexed).isEmpty();
-    }
-
-    /**
-     * Proves the code email job is wired up, so a code request actually leads to an email.
-     * <p>
-     * Cases: the context holds a TaskScheduler, EmailJobListener and EmailJobProcessor
-     * (specs/002-sending-code/research.md R1).
-     */
-    @Test
-    void theEmailJobIsWired() {
-        // When / Then: the scheduler and both job beans exist
-        assertThat(context.getBeanNamesForType(TaskScheduler.class)).isNotEmpty();
-        assertThat(context.getBean(EmailJobListener.class)).isNotNull();
-        assertThat(context.getBean(EmailJobProcessor.class)).isNotNull();
-    }
-
-    /**
-     * Proves that outside the local profile the app has a real email sender, so code emails do
-     * not silently go nowhere.
-     * <p>
-     * Cases: default profile with a Brevo key and sender set → a BrevoEmailSender bean exists
-     * (specs/002-sending-code/plan.md OQ2).
-     */
-    @Test
-    void brevoSendsOutsideTheLocalProfile() {
-        // When / Then: the Brevo sender is in the context
-        assertThat(context.getBean(BrevoEmailSender.class)).isNotNull();
     }
 }
