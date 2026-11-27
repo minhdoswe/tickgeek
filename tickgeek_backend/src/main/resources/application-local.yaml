@@ -32,5 +32,8 @@ tickgeek:
       per-source-per-hour: 20
       global-per-hour: 1000
     code-secret: ${TICKGEEK_AUTH_CODE_SECRET}
+  email:
+    max-attempts: 5
+    retry-base-delay: 5s
   frontend:
     secret: ${FRONTEND_SECRET}

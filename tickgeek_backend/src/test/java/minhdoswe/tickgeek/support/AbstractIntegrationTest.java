@@ -38,16 +38,26 @@ public abstract class AbstractIntegrationTest {
     @Autowired
     protected MutableClock clock;
 
+    @Autowired
+    protected RecordingEmailSender emailSender;
+
+    @Autowired
+    protected ControllableTaskScheduler scheduler;
+
     @DynamicPropertySource
     static void secrets(DynamicPropertyRegistry registry) {
         registry.add("tickgeek.auth.code-secret", () -> CODE_SECRET);
         registry.add("tickgeek.frontend.secret", () -> FRONTEND_SECRET);
+        registry.add("tickgeek.email.brevo.api-key", () -> "test-brevo-api-key");
+        registry.add("tickgeek.email.brevo.sender-email", () -> "no-reply@tickgeek.test");
     }
 
     @BeforeEach
     void resetState() {
         jdbc.execute("TRUNCATE outboxes, verification_codes RESTART IDENTITY CASCADE");
         clock.reset();
+        emailSender.reset();
+        scheduler.clear();
     }
 
     protected ResultActions postJson(String path, String json) throws Exception {
