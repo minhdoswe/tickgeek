@@ -1,14 +1,14 @@
 services:
   - type: web
     name: tickgeek-backend
-    runtime: docker
+    runtime: image
+    image:
+      url: ghcr.io/minhdoswe/tickgeek-backend:latest
+      creds:
+        fromRegistryCreds:
+          name: tickgeek
     plan: free
     region: singapore
-    dockerfilePath: ./tickgeek_backend/Dockerfile
-    dockerContext: ./tickgeek_backend
-    buildFilter:
-      paths:
-        - tickgeek_backend/**
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
