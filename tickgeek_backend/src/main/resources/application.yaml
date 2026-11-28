@@ -16,6 +16,10 @@ spring:
       ddl-auto: validate
   flyway: 
     enabled: true
+  task:
+    scheduling:
+      pool:
+        size: 4
 
 server:
   port: ${PORT:8080}
