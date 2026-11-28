@@ -28,6 +28,10 @@ inputs:
   vercel-cli:
     description: Vercel CLI package with exact version, e.g. vercel@65.11.0
     required: true
+  vercel-bypass-secret:
+    description: Vercel protection bypass secret (staging only)
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -87,9 +91,12 @@ runs:
       shell: bash
       env:
         FRONTEND_URL: ${{ inputs.frontend-url }}
+        BYPASS: ${{ inputs.vercel-bypass-secret }}
       run: |
+        # Staging is behind Vercel Deployment Protection; the bypass header lets this check through.
+        hdr=(); [ -n "$BYPASS" ] && hdr=(-H "x-vercel-protection-bypass: $BYPASS")
         for _ in $(seq 1 12); do
-          if curl -fsS --max-time 20 -o /dev/null "$FRONTEND_URL/sign-in"; then exit 0; fi
+          if curl -fsS --max-time 20 "${hdr[@]}" -o /dev/null "$FRONTEND_URL/sign-in"; then exit 0; fi
           sleep 10
         done
         echo "::error::$FRONTEND_URL/sign-in does not answer"; exit 1

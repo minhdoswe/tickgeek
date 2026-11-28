@@ -119,6 +119,7 @@ jobs:
           vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
           frontend-url: ${{ vars.FRONTEND_URL }}
           vercel-cli: ${{ env.VERCEL_CLI }}   # from env at the top of this file
+          vercel-bypass-secret: ${{ secrets.VERCEL_BYPASS_SECRET }}   # staging only: passes Vercel Deployment Protection
 
   # 3. production: deploy the same release to production. If the production environment requires
   #    approval, the job waits here until someone approves it.
