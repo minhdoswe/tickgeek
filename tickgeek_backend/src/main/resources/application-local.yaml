@@ -35,5 +35,7 @@ tickgeek:
   email:
     max-attempts: 5
     retry-base-delay: 5s
+    claim-lease: 1m
+    sweep-interval: 1m
   frontend:
     secret: ${FRONTEND_SECRET}

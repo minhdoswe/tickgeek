@@ -36,13 +36,14 @@ public class OutboxJobSteps {
     }
 
     /**
-     * Claims the next attempt and returns the payload to send. Returns nothing when the job is
-     * finished, no longer wanted (then it is cancelled), not due yet, or out of attempts (then
-     * it gives up). The checks run in that order.
+     * Claims the next attempt and returns the payload to send. Returns nothing when another run
+     * holds the row, or the job is finished, no longer wanted (then it is cancelled), not due yet
+     * or leased, or out of attempts (then it gives up). The checks run in that order. The row
+     * lock makes the event and the sweeper claim one at a time (research.md R1, R3).
      */
     @Transactional
     public Optional<String> claim(UUID outboxId, Instant now) {
-        Outbox job = outboxes.findById(outboxId).orElse(null);
+        Outbox job = outboxes.lockById(outboxId).orElse(null);
         if (job == null || !job.isPending()) {
             return Optional.empty();
         }
@@ -57,7 +58,7 @@ public class OutboxJobSteps {
             abandon(job, MAX_ATTEMPTS_REACHED);
             return Optional.empty();
         }
-        job.claim();
+        job.claim(now, properties.claimLease());
         return Optional.of(job.getPayload());
     }
 

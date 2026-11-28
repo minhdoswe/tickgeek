@@ -19,6 +19,6 @@ public final class TestProperties {
     }
 
     public static EmailProperties email() {
-        return new EmailProperties(5, Duration.ofSeconds(5));
+        return new EmailProperties(5, Duration.ofSeconds(5), Duration.ofMinutes(1), Duration.ofMinutes(1));
     }
 }

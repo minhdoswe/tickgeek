@@ -57,10 +57,15 @@ public class Outbox {
         return job;
     }
 
-    /** Counts an attempt before it is sent (specs/002-sending-code/research.md R2). */
-    public void claim() {
+    /**
+     * Counts an attempt before it is sent and leases the job until {@code now + lease}, so no
+     * other run picks it up while the send is in progress. The result of the attempt replaces the
+     * lease (specs/002-sending-code/research.md R1, R2).
+     */
+    public void claim(Instant now, Duration lease) {
         if (isPending()) {
             attempts++;
+            nextAttemptAt = now.plus(lease);
         }
     }
 
