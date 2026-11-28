@@ -15,11 +15,21 @@ Design decisions for [spec.md](spec.md). Decisions marked **(user)** were chosen
   records the failure, with delay = the backoff (R6).
 - **Rationale**: The first attempt starts right after the request commits (FR-001, SC-001). No
   new infrastructure is needed.
-- **Known gap (user)**: The schedule lives in memory. A restart loses every waiting retry, and two
-  running copies are not kept apart, so FR-009 and the restart edge case are **not** met yet. A
-  sweeper that picks up due `PENDING` rows will be added in a later feature. It should claim rows
-  with `FOR UPDATE SKIP LOCKED` (`lock-skip-locked.md`), and `outboxes` will need an index on
-  `next_attempt_at` for `status = 'PENDING'` at that point.
+- **Restart recovery (user)**: The schedule lives in memory, so a restart loses waiting events.
+  `OutboxSweeper` covers that: every `tickgeek.email.sweep-interval` (1 min) it runs up to 100
+  `PENDING` jobs with `next_attempt_at <= now` through the normal processor. Two runs of one job
+  are kept apart in two ways:
+  - **Row lock**: `claim` loads the row with `FOR UPDATE SKIP LOCKED` (`lock-skip-locked.md`), so
+    a row another run is claiming is skipped, not waited for. This holds only during TX 1.
+  - **Lease**: `claim` sets `next_attempt_at = now + tickgeek.email.claim-lease` (1 min), so check
+    3 in R3 turns every other run away while the send is in progress. The result replaces the
+    lease (backoff, or `SENT`). A crash mid-send leaves the lease, and the sweeper resends once it
+    runs out.
+
+  The lease must stay longer than the longest send (Brevo connect + read timeout, 5 s), or a slow
+  send is sent twice. A crash after the provider accepted but before TX 2 also sends twice:
+  delivery is at-least-once. The index `outboxes_pending_next_attempt_at_idx` (V5) serves the
+  sweeper's query. With lease and sweep both 1 min, a job lost in a crash goes out within ~2 min.
 - **To verify**: Spring Boot 4.1 creates a `TaskScheduler` bean when `@EnableScheduling` is
   present (`SchedulingConfig`). This is from memory, not checked. The context test
   (`ApplicationContextIT`) confirms it.
@@ -54,7 +64,8 @@ Design decisions for [spec.md](spec.md). Decisions marked **(user)** were chosen
 - **Decision**: `claim` checks in this order and stops at the first match:
   1. outbox not `PENDING` → nothing (FR-010);
   2. the owner says the job is no longer wanted (code not `PENDING`) → cancel the outbox (R5);
-  3. `next_attempt_at > now` → nothing; its own event comes later;
+  3. `next_attempt_at > now` → nothing: either not due yet (its own event or a sweep comes
+     later) or leased by a run in progress (R1);
   4. `attempts >= max-attempts` → abandon with `"max attempts reached"` (reached only when an
      earlier attempt crashed between TX 1 and TX 2);
   5. otherwise claim.
@@ -112,8 +123,8 @@ Design decisions for [spec.md](spec.md). Decisions marked **(user)** were chosen
 - **Consequences**:
   - No attempt starts after the code was replaced, so SC-007 holds.
   - The old outbox stays `PENDING`, with the plaintext code and the address in `payload`, until
-    its next scheduled attempt (at most 40 s). After a restart (R1 gap) it is never cancelled and
-    keeps its payload until the sweeper exists.
+    its next scheduled attempt (at most 40 s). After a restart, the sweeper runs it within one
+    sweep interval of that time, and it is cancelled then (R1).
   - This differs from US4, which says the job is recorded as cancelled when code B is requested.
 - **Alternatives considered**: Eager cancel in `CodeRequestService`, in the same transaction as
   `invalidateLive` (matches US4 and clears the payload at once, but adds a second writer and needs

@@ -23,6 +23,7 @@ class OutboxJobStepsTest {
     private static final Instant NOW = Instant.parse("2026-11-11T10:00:00Z");
     private static final UUID ID = UUID.fromString("019a7a2c-0000-7000-8000-000000000009");
     private static final String PAYLOAD = "{payload}";
+    private static final Duration LEASE = TestProperties.email().claimLease();
 
     private final OutboxRepository outboxes = mock(OutboxRepository.class);
     private final OutboxJobOwner owner = mock(OutboxJobOwner.class);
@@ -45,9 +46,45 @@ class OutboxJobStepsTest {
         // When: an attempt is claimed at NOW
         Optional<String> claimed = steps.claim(ID, NOW);
 
-        // Then: the payload comes back and the attempt is counted
+        // Then: the payload comes back, the attempt is counted and the job is leased
         assertThat(claimed).contains(PAYLOAD);
         assertThat(job.getAttempts()).isEqualTo(1);
+        assertThat(job.getNextAttemptAt()).isEqualTo(NOW.plus(LEASE));
+    }
+
+    /**
+     * Proves a job claimed moments ago is not claimed again while its send may still be running,
+     * so a second event or a sweep doesn't send it twice.
+     * <p>
+     * Cases: claimed at NOW, claimed again at NOW + 59 s → empty, attempts stay 1
+     * (specs/002-sending-code/research.md R1, R3).
+     */
+    @Test
+    void doesNotClaimAJobInsideItsLease() {
+        // Given: a job claimed at NOW whose code still wants it
+        Outbox job = stored(Outbox.pending(PAYLOAD, NOW));
+        when(owner.isStillWanted(ID)).thenReturn(true);
+        steps.claim(ID, NOW);
+
+        // When / Then: claiming again before the lease ends gives nothing
+        assertThat(steps.claim(ID, NOW.plus(LEASE).minusSeconds(1))).isEmpty();
+        assertThat(job.getAttempts()).isEqualTo(1);
+    }
+
+    /**
+     * Proves a job another run is claiming right now is skipped, not waited for.
+     * <p>
+     * Cases: row locked elsewhere (lockById empty) → empty, owner not asked
+     * (specs/002-sending-code/research.md R1).
+     */
+    @Test
+    void skipsAJobAnotherRunHolds() {
+        // Given: the row is locked by another transaction
+        when(outboxes.lockById(ID)).thenReturn(Optional.empty());
+
+        // When / Then: nothing is claimed
+        assertThat(steps.claim(ID, NOW)).isEmpty();
+        verify(owner, never()).isStillWanted(any());
     }
 
     /**
@@ -96,7 +133,7 @@ class OutboxJobStepsTest {
     void successMarksSentAndDeliversToTheOwner() {
         // Given: a claimed job
         Outbox job = stored(Outbox.pending(PAYLOAD, NOW));
-        job.claim();
+        job.claim(NOW, LEASE);
 
         // When: the success is recorded
         steps.recordSuccess(ID, NOW);
@@ -117,7 +154,7 @@ class OutboxJobStepsTest {
     void aFailureWithRetriesLeftIsRescheduled() {
         // Given: a job whose first attempt was claimed
         Outbox job = stored(Outbox.pending(PAYLOAD, NOW));
-        job.claim();
+        job.claim(NOW, LEASE);
 
         // When: the attempt failed
         steps.recordFailure(ID, NOW, "IllegalStateException: provider unavailable");
@@ -142,7 +179,7 @@ class OutboxJobStepsTest {
         // Given: a job whose fifth attempt was claimed
         Outbox job = stored(Outbox.pending(PAYLOAD, NOW));
         for (int attempt = 0; attempt < 5; attempt++) {
-            job.claim();
+            job.claim(NOW, LEASE);
         }
 
         // When: that attempt failed
@@ -159,20 +196,20 @@ class OutboxJobStepsTest {
      * Proves a job that already used every attempt is not tried again, even if an earlier
      * attempt crashed before recording its result: it gives up instead.
      * <p>
-     * Cases: PENDING, attempts 5 of 5, due → empty, ERROR "max attempts reached",
+     * Cases: PENDING, attempts 5 of 5, lease over → empty, ERROR "max attempts reached",
      * owner.abandoned (specs/002-sending-code/research.md R3).
      */
     @Test
     void aJobWithNoAttemptsLeftGivesUpInsteadOfSending() {
-        // Given: a pending, due job that already used its 5 attempts
+        // Given: a pending job that used its 5 attempts, the last one crashed, and its lease ran out
         Outbox job = stored(Outbox.pending(PAYLOAD, NOW));
         for (int attempt = 0; attempt < 5; attempt++) {
-            job.claim();
+            job.claim(NOW, LEASE);
         }
         when(owner.isStillWanted(ID)).thenReturn(true);
 
         // When / Then: nothing is claimed and the job gives up
-        assertThat(steps.claim(ID, NOW)).isEmpty();
+        assertThat(steps.claim(ID, NOW.plus(LEASE))).isEmpty();
         assertThat(job.getStatus()).isEqualTo(OutboxStatus.ERROR);
         assertThat(job.getLastError()).isEqualTo(OutboxJobSteps.MAX_ATTEMPTS_REACHED);
         assertThat(job.getAttempts()).isEqualTo(5);
@@ -200,6 +237,7 @@ class OutboxJobStepsTest {
 
     private Outbox stored(Outbox job) {
         ReflectionTestUtils.setField(job, "id", ID);
+        when(outboxes.lockById(ID)).thenReturn(Optional.of(job));
         when(outboxes.findById(ID)).thenReturn(Optional.of(job));
         return job;
     }

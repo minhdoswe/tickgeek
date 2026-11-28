@@ -1,6 +1,7 @@
 package minhdoswe.tickgeek.support;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -33,6 +34,20 @@ public class ControllableTaskScheduler extends ThreadPoolTaskScheduler {
             return null;
         }
         return super.schedule(task, Instant.now());
+    }
+
+    /**
+     * Never starts a repeating task such as the outbox sweeper, so it can't run in the background
+     * during a test; tests call it directly.
+     */
+    @Override
+    public ScheduledFuture<?> scheduleWithFixedDelay(Runnable task, Duration delay) {
+        return null;
+    }
+
+    @Override
+    public ScheduledFuture<?> scheduleWithFixedDelay(Runnable task, Instant startTime, Duration delay) {
+        return null;
     }
 
     /** Runs, on the calling thread, every held task that is due by the test clock. */

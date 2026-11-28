@@ -50,6 +50,10 @@ tickgeek:
   email:
     max-attempts: 5
     retry-base-delay: 5s
+    # Must stay longer than the longest send (Brevo connect + read timeout), or a slow send is
+    # sent twice.
+    claim-lease: 1m
+    sweep-interval: 1m
     # Used outside the `local` profile. An empty api-key or sender-email stops startup.
     # The sender address must be a sender verified in the Brevo account.
     brevo:

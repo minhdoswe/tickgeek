@@ -11,6 +11,7 @@ class OutboxTest {
 
     private static final Instant NOW = Instant.parse("2026-11-11T10:00:00Z");
     private static final Instant LATER = NOW.plusSeconds(3);
+    private static final Duration LEASE = Duration.ofMinutes(1);
 
     /**
      * Proves claiming counts the attempt, so a job that keeps failing or crashing still reaches
@@ -24,11 +25,36 @@ class OutboxTest {
         Outbox job = Outbox.pending("{payload}", NOW);
 
         // When: two attempts are claimed
-        job.claim();
-        job.claim();
+        job.claim(NOW, LEASE);
+        job.claim(NOW, LEASE);
 
         // Then: both are counted
         assertThat(job.getAttempts()).isEqualTo(2);
+    }
+
+    /**
+     * Proves claiming leases the job until the lease ends, so no other run picks it up while it is
+     * being sent, and a failure then replaces the lease with the backoff.
+     * <p>
+     * Cases: claim at NOW, lease 1 min → next attempt NOW + 1 min; fail at LATER → LATER + 5 s
+     * (specs/002-sending-code/research.md R1, R6).
+     */
+    @Test
+    void claimLeasesTheJobUntilItsResult() {
+        // Given: a new job
+        Outbox job = Outbox.pending("{payload}", NOW);
+
+        // When: an attempt is claimed
+        job.claim(NOW, LEASE);
+
+        // Then: it is leased for one minute
+        assertThat(job.getNextAttemptAt()).isEqualTo(NOW.plus(LEASE));
+
+        // When: the attempt fails
+        job.retryLater(LATER, "boom", Duration.ofSeconds(5));
+
+        // Then: the backoff replaces the lease
+        assertThat(job.getNextAttemptAt()).isEqualTo(LATER.plusSeconds(5));
     }
 
     /**
@@ -66,7 +92,7 @@ class OutboxTest {
         job.succeed(NOW);
 
         // When: it is claimed and succeeds again
-        job.claim();
+        job.claim(NOW, LEASE);
         job.succeed(LATER);
 
         // Then: nothing changed
@@ -88,7 +114,7 @@ class OutboxTest {
 
         for (long expectedWait : new long[] {5, 10, 20, 40}) {
             // When: an attempt is claimed and fails at NOW
-            job.claim();
+            job.claim(NOW, LEASE);
             job.retryLater(NOW, "boom", Duration.ofSeconds(5));
 
             // Then: the next attempt waits twice as long as the last one
@@ -107,14 +133,14 @@ class OutboxTest {
     void aFinishedJobIsNotRescheduled() {
         // Given: a job that was already sent
         Outbox job = Outbox.pending("{payload}", NOW);
-        job.claim();
+        job.claim(NOW, LEASE);
         job.succeed(NOW);
 
         // When: a failure arrives
         job.retryLater(LATER, "boom", Duration.ofSeconds(5));
 
         // Then: nothing changed
-        assertThat(job.getNextAttemptAt()).isEqualTo(NOW);
+        assertThat(job.getNextAttemptAt()).isEqualTo(NOW.plus(LEASE));
         assertThat(job.getLastError()).isNull();
     }
 
